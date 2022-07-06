@@ -1,0 +1,4 @@
+/mask/weight/*
+/mask/test_imgs/*
+/mask/logs/*
+/style_gan/network/pkl/*
