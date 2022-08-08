@@ -2,3 +2,5 @@
 /mask/test_imgs/*
 /mask/logs/*
 /style_gan/network/pkl/*
+/__pycache__
+/.idea

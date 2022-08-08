@@ -11,12 +11,13 @@ sys.path.append('./dibr')
 
 from style_gan import style_gan
 from mask import mask
+from cmr import cmr
 from dibr import dibr
 
 # start : uvicorn main:app --reload
 app = FastAPI()
 
-categories = ['ring','shirts']
+categories = ['ring','shirts','pants','hat','necklace','']
 
 # style_gan 모델 불러오기
 style_gan_network_path = "style_gan/network/shirts.pkl"
@@ -65,12 +66,10 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     ''' in style_gan.py '''
     image = load_into_numpy_array_and_resize(await file.read(),style_gan_model.img_resolution)
 
-    # image에 맞는 latent vector 생성
-    w = style_gan.get_w_from_image(style_gan_model,vgg16,torch.Tensor(image.transpose(2, 0, 1)),verbose=True)
+    # image를 넣어 camera, mesh, texture 생성
+    camera, mesh, texture = cmr.get_object_from_image(style_gan_model,vgg16,torch.Tensor(image.transpose(2, 0, 1)),verbose=True)
 
-    print(w)
-
-    # latent vector를 style gan network에 넣어 다각도 이미지 생성
+    # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
     # col_styles = [0,1,2,3]
     # mv_images = get_multiview_images(style_gan_model, w, w_views[category], col_styles)
 
@@ -80,7 +79,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     ''' in dibr.py '''
     # 3D Object 생성
-    # bin_path, obj_path, thumb_nail_img = dibr.create_3d_object(mv_images,mv_masks,cameras_info[category],category)
+    # bin_path, obj_path, thumb_nail_img = dibr.create_3d_object(mesh, texture, mv_masks, cameras_info[category],category)
     
     # 3D Object를 저장소에 저장
     # save_file_into_store(bin_path)
