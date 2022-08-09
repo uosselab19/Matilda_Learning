@@ -1,6 +1,7 @@
 import sys
 from fastapi import FastAPI, File, Form, UploadFile
 from PIL import Image
+from PIL import ImageOps
 from io import BytesIO
 import numpy as np
 import torch
@@ -18,11 +19,6 @@ app = FastAPI()
 
 categories = ['ring','shirts','pants','hat','necklace','bag']
 samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
-
-style_gan_models, mask_model, predictor_models, diffRenderers = get_all_models()
-
-# 카메라 정보 불러오기
-cameras_info = load_cameras_info('./predictor/samples/')
 
 def get_all_models():
     # TODO: 카테고리 별로 모델 불러오기
@@ -51,24 +47,29 @@ def get_all_models():
 
     return style_gan_models, mask_model, predictor_models, diffRenderers
 
-def save_file_into_store(path):
-    return
-
 def load_cameras_info(root):
     cameras_info = {}
     for category in categories:
         cameras_info[category] = np.load(f'{root}{category}.npy')
     return cameras_info
 
+style_gan_models, mask_model, predictor_models, diffRenderers = get_all_models()
+
+# 카메라 정보 불러오기
+cameras_info = load_cameras_info('./predictor/samples/')
+
+def save_file_into_store(path):
+    return
+
 def load_into_numpy_array_and_resize(data, resolution):
-    image = Image.open(BytesIO(data))
-    W, H = image.size
+    img = Image.open(BytesIO(data))
+    W, H = img.size
     desired_size = max(W, H)
     delta_w = desired_size - W
     delta_h = desired_size - H
     padding = (delta_w // 2, delta_h // 2, delta_w - (delta_w // 2), delta_h - (delta_h // 2))
     img = ImageOps.expand(img, padding)
-    img = img.resize((target_height, target_width), Image.LANCZOS)
+    img = img.resize((resolution, resolution), Image.LANCZOS)
 
     img = np.array(img, dtype=np.uint8)
     return img
@@ -79,7 +80,7 @@ async def root():
 
 @app.post("/convert/")
 async def convert(file: UploadFile = File(...), category : str = Form(...)):
-    image = load_into_numpy_array_and_resize(await file.read(),style_gan_model.img_resolution)
+    image = load_into_numpy_array_and_resize(await file.read(),style_gan_models[category].img_resolution)
 
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
