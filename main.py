@@ -17,7 +17,8 @@ from predictor import predictor
 # start : uvicorn main:app --reload
 app = FastAPI()
 
-categories = ['ring','shirts','pants','hat','necklace','bag']
+# categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
+categories = ['shirts'] # for test
 samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
 
 def get_all_models():
