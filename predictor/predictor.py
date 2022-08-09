@@ -1,0 +1,433 @@
+from network import networks
+# import kaolin related
+import kaolin as kal
+from kaolin.render.camera import generate_perspective_projection, generate_transformation_matrix
+from kaolin.render.mesh import dibr_rasterization, texture_mapping, \
+                               spherical_harmonic_lighting, prepare_vertices
+
+# import
+import os
+import time
+
+# import skimage
+# from skimage import io
+import aspose.threed as a3d
+from PIL import Image
+import numpy as np
+
+from pxr import Gf, Kind, Sdf, Usd, UsdGeom, UsdShade, Vt
+import posixpath
+
+from PerceptualSimilarity.models import dist_model
+
+### get_model ###
+def get_predictor_model(template_path, resume_path, image_size):
+    assert os.path.exists(resume_path)
+
+    diffRender = DiffRender(filename_obj=template_path, image_size=image_size)
+
+    # netE: 3D attribute encoder: Light, Shape, and Texture
+    netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32)
+    netE = netE.cuda()
+
+    print("=> loading checkpoint '{}'".format(opt.resume))
+    # Map model to be loaded to specified single gpu.
+    checkpoint = torch.load(resume_path)
+    netE.load_state_dict(checkpoint['netE'])
+    print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
+
+    return netE, diffRender
+
+#####################################################################
+# ----------------------------- DIB_R ----------------------------- #
+#####################################################################
+
+def recenter_vertices(vertices, vertice_shift):
+    """Recenter vertices on vertice_shift for better optimization"""
+    vertices_min = vertices.min(dim=1, keepdim=True)[0]
+    vertices_max = vertices.max(dim=1, keepdim=True)[0]
+    vertices_mid = (vertices_min + vertices_max) / 2
+    vertices = vertices - vertices_mid + vertice_shift
+    return vertices
+
+class Mesh():
+    def __init__(self, vertices, textures, faces, uvs, face_uvs, face_uvs_idx):
+        self.vertices = vertices,
+        self.textures = textures,
+        self.faces = faces,
+        self.uvs = uvs,
+        self.face_uvs = face_uvs,
+        self.face_uvs_idx = face_uvs_idx
+
+class DiffRender(object):
+    # Hyperparameters
+    num_epoch = 210
+    batch_size = 1
+
+    laplacian_weight = 0.3  # ring -> 0.3 , shirts -> 0.01
+    image_weight = 0.1
+    mask_weight = 1.
+
+    texture_lr = 3e-2
+    vertice_lr = 5e-2
+    camera_lr = 5e-4
+
+    scheduler_step_size = 40
+    scheduler_gamma = 0.5
+
+    thumb_nail_id = 0
+
+    def __init__(self, filename_obj, image_size):
+        self.image_size = image_size
+        # camera projection matrix
+        camera_fovy = np.arctan(1.0 / 2.5) * 2
+        self.cam_proj = generate_perspective_projection(camera_fovy, ratio=image_size / image_size)
+        self.texture_loss = PerceptualTextureLoss()
+
+        mesh = kal.io.obj.import_mesh(filename_obj, with_materials=True)
+
+        # get vertices_init
+        vertices = mesh.vertices
+        vertices.requires_grad = False
+        vertices_max = vertices.max(0, True)[0]
+        vertices_min = vertices.min(0, True)[0]
+        vertices = (vertices - vertices_min) / (vertices_max - vertices_min)
+        vertices_init = vertices * 2.0 - 1.0  # (1, V, 3)
+
+        # get face_uvs
+        faces = mesh.faces
+        uvs = mesh.uvs.unsqueeze(0)
+        face_uvs_idx = mesh.face_uvs_idx
+        face_uvs = kal.ops.mesh.index_vertices_by_faces(uvs, face_uvs_idx).detach()
+        face_uvs.requires_grad = False
+
+        self.num_faces = faces.shape[0]
+        self.num_vertices = vertices_init.shape[0]
+        face_size = 3
+
+        # flip index
+        vertex_center_flip = vertices_init.clone()
+        vertex_center_flip[:, 2] *= -1
+        self.flip_index = torch.cdist(vertices_init, vertex_center_flip).min(1)[1]
+
+        ## Set up auxiliary laplacian matrix for the laplacian loss
+        vertices_laplacian_matrix = kal.ops.mesh.uniform_laplacian(self.num_vertices, faces)
+
+        self.vertices_init = vertices_init
+        self.faces = faces
+        self.uvs = uvs
+        self.face_uvs = face_uvs
+        self.face_uvs_idx = face_uvs_idx
+        self.vertices_laplacian_matrix = vertices_laplacian_matrix
+
+    def set_dataloader(self, images, masks, cameras_info):
+        train_data = []
+        for cnt, image, mask, camera_info in enumerate(zip(images, masks, cameras_info)):
+            data = {}
+            data['rgb'] = torch.from_numpy(image)[:, :, :3].float() / 255.
+            data['sementic'] = torch.from_numpy(mask)
+            data['view_num'] = cnt
+            train_data.append(data)
+
+        self.dataloader = torch.utils.data.DataLoader(train_data, batch_size=self.batch_size,
+                                                 shuffle=True, pin_memory=True)
+        return
+
+    def render(self, mesh, cam_transform):
+
+        vertices = mesh.vertices
+        textures = mesh.texture_map
+
+        device = camera_pos.device
+        cam_proj = self.cam_proj.to(device)
+
+        faces = self.faces.to(device)
+        face_uvs = self.face_uvs.to(device)
+
+        num_faces = faces.shape[0]
+
+        # object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
+        # camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
+
+        ### Prepare mesh data with projection regarding to camera ###
+        vertices_batch = recenter_vertices(mesh.vertices, vertice_shift)
+
+        face_vertices_camera, face_vertices_image, face_normals = \
+            prepare_vertices(vertices=vertices_batch.repeat(batch_size, 1, 1),
+                             faces=faces, camera_proj=cam_proj, camera_transform=cam_transform
+                             )
+
+        face_attributes = [
+            mesh.face_uvs.repeat(batch_size, 1, 1, 1),
+            torch.ones((batch_size, nb_faces, 3, 1), device='cuda')
+        ]
+
+        image_features, soft_mask, face_idx = dibr_rasterization(
+            self.image_size, self.image_size, face_vertices_camera[:, :, :, -1],
+            face_vertices_image, face_attributes, face_normals[:, :, -1])
+
+        # image_features is a tuple in composed of the interpolated attributes of face_attributes
+        texture_coords, mask = image_features
+        image = kal.render.mesh.texture_mapping(texture_coords,
+                                                mesh.texture_map.repeat(batch_size, 1, 1, 1),
+                                                mode='bilinear')
+        render_img = image.permute(0, 3, 1, 2)
+        render_silhouttes = soft_mask
+
+        return render_img, render_silhouttes, attributes
+
+    def train(self, mesh, camera_info):
+        ## Separate vertices center as a learnable parameter
+        vertices_init = self.vertices_init
+        vertices_init.requires_grad = False
+
+        # This is the center of the optimized mesh, separating it as a learnable parameter helps the optimization.
+        vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
+                                    requires_grad=True)
+
+        nb_faces = self.num_faces
+        nb_vertices = self.num_vertices
+        face_size = 3
+
+        camera_pos = camera_info[0].cuda()
+        object_pos = camera_info[1].cuda()
+        camera_up = camera_info[2].cuda()
+
+        camera_pos.requires_grad = True
+        object_pos.requires_grad = True
+        camera_up.requires_grad = True
+
+        # Set up auxiliary laplacian matrix for the laplacian loss
+        vertices_laplacian_matrix = self.vertices_laplacian_matrix
+
+        # Set optimizer and scheduler
+        vertices_optim = torch.optim.Adam(params=[mesh.vertices, vertice_shift],
+                                          lr=vertice_lr)
+        texture_optim = torch.optim.Adam(params=[mesh.texture_map], lr=texture_lr)
+
+        camera_optim = torch.optim.Adam(params=[camera_pos, object_pos, camera_up], lr=camera_lr)
+
+        vertices_scheduler = torch.optim.lr_scheduler.StepLR(
+            vertices_optim,
+            step_size=scheduler_step_size,
+            gamma=scheduler_gamma)
+        texture_scheduler = torch.optim.lr_scheduler.StepLR(
+            texture_optim,
+            step_size=scheduler_step_size,
+            gamma=scheduler_gamma)
+        camera_scheduler = torch.optim.lr_scheduler.StepLR(
+            camera_optim,
+            step_size=scheduler_step_size,
+            gamma=scheduler_gamma)
+
+        ## start train
+        for epoch in range(num_epoch):
+            for idx, data in enumerate(self.dataloader):
+                vertices_optim.zero_grad()
+                texture_optim.zero_grad()
+                camera_optim.zero_grad()
+
+                gt_imgs = data['rgb'].cuda()
+                gt_masks = data['semantic'].cuda()
+
+                cam_transform = generate_transformation_matrix(camera_pos[data['view_num']], object_pos[data['view_num']], camera_up[data['view_num']])
+
+                pred_imgs, pred_masks, attributes = self.render(mesh)
+
+                ### Compute Losses ###
+                # img, mask loss
+                loss = self.calc_img_loss(pred_imgs, pred_masks, gt_imgs, gt_masks.squeeze(1))
+
+                # mesh regularization
+                loss_lap = self.calc_lap_loss(att)
+                loss_mov = self.calc_mov_loss(att) / 3.
+
+                total_loss = loss + loss_lap + loss_mov
+                ### Update the mesh ###
+                total_loss.backward()
+
+                vertices_optim.step()
+                texture_optim.step()
+                camera_optim.step()
+
+            vertices_scheduler.step()
+            texture_scheduler.step()
+            camera_scheduler.step()
+
+            print(f"Epoch {epoch} - loss: {float(loss)}")
+
+    def calc_img_loss(self, pred_img, pred_mask, gt_img, gt_mask):
+        loss_image = torch.mean(torch.abs(pred_img - gt_img))
+        loss_mask = kal.metrics.render.mask_iou(pred_mask, gt_mask)
+        loss_perceptual = self.texture_loss(pred_img, gt_img)
+
+        loss_data = opt.image_weight * loss_image + opt.mask_weight * loss_mask + opt.perceptual_wight * loss_perceptual
+        return loss_data
+
+    def calc_mov_loss(self, att):
+        Na = att['delta_vertices']
+        Nf = Na.index_select(1, self.flip_index.to(Na.device))
+        Nf[..., 2] *= -1
+
+        loss_norm = (Na - Nf).norm(dim=2).mean()
+        return opt.mov_weight * loss_norm
+
+    def calc_lap_loss(self, att):
+        # laplacian loss
+        delta_vertices = att['delta_vertices']
+        device = delta_vertices.device
+        nb_vertices = delta_vertices.shape[1]
+
+        vertices_laplacian_matrix = self.vertices_laplacian_matrix.to(device)
+
+        delta_vertices_laplacian = torch.matmul(vertices_laplacian_matrix, delta_vertices)
+        loss_laplacian = torch.mean(delta_vertices_laplacian ** 2) * nb_vertices * 3
+
+        loss_reg = opt.laplacian_weight * loss_laplacian
+        return loss_reg
+
+    def create_3d_object(self, vertices, textures, images, masks, cameras_info, category):
+        # path to the rendered image (using the data synthesizer)
+
+        save_path = f'./save/{category}/'
+        mesh_scale = 3
+
+        # dataloader 세팅
+        self.set_dataloader(images, masks, cameras_info)
+
+        # 초기 mesh 정보 가져오기
+        mesh = Mesh(vertices, textures, self.faces, self.uvs, self.face_uvs, self.face_uvs_idx)
+
+        # train
+        self.train(mesh)
+
+        # save object
+        bin_path, obj_file_path = self.export_into_gltf(save_path, mesh, category)
+
+        # get thumbnail img
+        thumb_img = self.get_thumbnail(mesh,cameras_info)
+
+        return bin_path, obj_file_path, thumb_img
+
+    def get_thumbnail(self, vertices, cameras_info):
+        # This is similar to a training iteration (without the loss part)
+        camera_pos = camera_info[0][self.thumb_nail_id].cuda()
+        object_pos = camera_info[1][self.thumb_nail_id].cuda()
+        camera_up = camera_info[2][self.thumb_nail_id].cuda()
+
+        cam_transform = kal.render.camera.generate_transformation_matrix(camera_pos, object_pos, camera_up)
+
+        cam_proj = self.cam_proj.cuda()
+
+        face_vertices_camera, face_vertices_image, face_normals = \
+            kal.render.mesh.prepare_vertices(
+                vertices, self.faces, cam_proj, camera_transform=cam_transform
+            )
+
+        face_attributes = [
+            self.face_uvs.repeat(test_batch_size, 1, 1, 1),
+            torch.ones((test_batch_size, nb_faces, 3, 1), device='cuda'),
+        ]
+
+        image_features, soft_mask, face_idx = kal.render.mesh.dibr_rasterization(
+            self.image_size, self.image_size, face_vertices_camera[:, :, :, -1],
+            face_vertices_image, face_attributes, face_normals[:, :, -1])
+
+        texture_coords, mask = image_features
+        image = kal.render.mesh.texture_mapping(texture_coords,
+                                                texture_map.repeat(test_batch_size, 1, 1, 1),
+                                                mode='bilinear')
+        image = torch.clamp(image * mask + torch.ones_like(image) * (1 - mask), 0., 1.)
+
+        return image
+
+    def export_into_gltf(self, save_path, mesh, category):
+        time = Usd.TimeCode.Default()
+
+        # 저장할 object name setting
+        mesh_name = 'obj'
+        ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
+
+        # save texture
+        usd_dir = os.path.dirname(ind_out_path)
+
+        texture_dir = 'textures'
+        rel_filepath = posixpath.join(texture_dir, f'{mesh_name}_diffuse.png')
+
+        img_tensor = torch.clamp(mesh.texture_map[0], 0., 1.)
+        img_tensor_uint8 = (img_tensor * 255.).clamp_(0, 255).permute(1, 2, 0).to(torch.uint8)
+        img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
+        img.save(posixpath.join(usd_dir, rel_filepath))
+
+        # create stage
+        scene_path = "/TexModel"
+        print(ind_out_path)
+        if os.path.exists(ind_out_path):
+            stage = Usd.Stage.Open(ind_out_path)
+        else:
+            stage = Usd.Stage.CreateNew(ind_out_path)
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+        modelRoot = UsdGeom.Xform.Define(stage, scene_path)
+        Usd.ModelAPI(modelRoot).SetKind(Kind.Tokens.component)
+
+        # mesh
+        usd_mesh = UsdGeom.Mesh.Define(stage, f'{scene_path}/{category}')
+
+        # face
+        num_faces = mesh.faces.size(0)
+        face_vertex_counts = [mesh.faces.size(1)] * num_faces
+        faces_list = mesh.faces.view(-1).cpu().long().numpy()
+        usd_mesh.GetFaceVertexCountsAttr().Set(face_vertex_counts, time=time)
+        usd_mesh.GetFaceVertexIndicesAttr().Set(faces_list, time=time)
+
+        # vertices
+        vertices_list = mesh.vertices.detach().cpu().float().numpy()
+        usd_mesh.GetPointsAttr().Set(Vt.Vec3fArray.FromNumpy(vertices_list), time=time)
+
+        # uvs
+        uvs_list = mesh.uvs.view(-1, 2).detach().cpu().float().numpy()
+        pv = UsdGeom.PrimvarsAPI(usd_mesh.GetPrim()).CreatePrimvar(
+            'st', Sdf.ValueTypeNames.TexCoord2fArray)
+        pv.Set(uvs_list, time=time)
+        pv.SetInterpolation('faceVarying')
+        pv.SetIndices(Vt.IntArray.FromNumpy(mesh.face_uvs_idx.view(-1).cpu().long().numpy()), time=time)
+
+        # material
+        material_path = f'{scene_path}/{category}Mat'
+        material = UsdShade.Material.Define(stage, material_path)
+
+        pbrShader = UsdShade.Shader.Define(stage, f'{material_path}/PBRShader')
+        pbrShader.CreateIdAttr("UsdPreviewSurface")
+        pbrShader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.4)
+        pbrShader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0)
+
+        material.CreateSurfaceOutput().ConnectToSource(pbrShader.ConnectableAPI(), "surface")
+
+        stReader = UsdShade.Shader.Define(stage, f'{material_path}/stReader')
+        stReader.CreateIdAttr('UsdPrimvarReader_float2')
+
+        diffuseTextureSampler = UsdShade.Shader.Define(stage, f'{material_path}/diffuseTexture')
+        diffuseTextureSampler.CreateIdAttr('UsdUVTexture')
+        diffuseTextureSampler.CreateInput('file', Sdf.ValueTypeNames.Asset).Set(f"{rel_filepath}")
+        diffuseTextureSampler.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(stReader.ConnectableAPI(),
+                                                                                           'result')
+        diffuseTextureSampler.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
+        pbrShader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(
+            diffuseTextureSampler.ConnectableAPI(), 'rgb')
+
+        stInput = material.CreateInput('frame:stPrimvarName', Sdf.ValueTypeNames.Token)
+        stInput.Set('st')
+
+        stReader.CreateInput('varname', Sdf.ValueTypeNames.Token).ConnectToSource(stInput)
+        UsdShade.MaterialBindingAPI(usd_mesh).Bind(material)
+
+        stage.Save()
+
+        save_file_path = f"{save_path}obj_{time}.gltf"
+        bin_path = f"{save_path}buffer.bin"
+
+        scn = a3d.Scene()
+        scn.open(ind_out_path)
+        scn.save(save_file_path, a3d.FileFormat.GLTF2)
+
+        return bin_path, save_file_path
