@@ -11,18 +11,18 @@ sys.path.append('./style_gan')
 sys.path.append('./predictor')
 
 from style_gan import style_gan
-from mask import mask
+#from mask import mask
 from predictor import predictor
 
 # start : uvicorn main:app --reload
 app = FastAPI()
 
 # categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
-categories = ['shirts'] # for test
-samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
+categories = ['bird'] # for test
+#samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
+samples_per_categories = {'bird' : 'sphere'}
 
 def get_all_models():
-    # TODO: 카테고리 별로 모델 불러오기
     image_size = 512
 
     style_gan_models = {}
@@ -31,22 +31,22 @@ def get_all_models():
 
     for category in categories:
         # style_gan
-        style_gan_network_path = f"./style_gan/network/{category}.pkl"
-        style_gan_models[category] = style_gan.get_models(style_gan_network_path)
+        #style_gan_network_path = f"./style_gan/network/{category}.pkl"
+        #style_gan_models[category] = style_gan.get_models(style_gan_network_path)
 
         # predictor
         predictor_model_path = f'./predictor/network/{category}.pth'
-        init_mesh_path = f"./predictor/samples/{samples_per_categories[category]}.pkl"
+        init_mesh_path = f"./predictor/samples/{samples_per_categories[category]}.obj"
         predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size)
         predictor_models[category] = predictor_model
         if samples_per_categories[category] not in diffRenderers:
             diffRenderers[samples_per_categories[category]] = diffRenderer
 
     # mask 모델 불러오기
-    mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
-    mask_model = mask.get_mask_model(mask_weights_path)
+    #mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
+    #mask_model = mask.get_mask_model(mask_weights_path)
 
-    return style_gan_models, mask_model, predictor_models, diffRenderers
+    return style_gan_models, predictor_models, diffRenderers
 
 def load_cameras_info(root):
     cameras_info = {}
@@ -54,10 +54,10 @@ def load_cameras_info(root):
         cameras_info[category] = np.load(f'{root}{category}.npy')
     return cameras_info
 
-style_gan_models, mask_model, predictor_models, diffRenderers = get_all_models()
+style_gan_models, predictor_models, diffRenderers = get_all_models()
 
 # 카메라 정보 불러오기
-cameras_info = load_cameras_info('./predictor/samples/')
+#cameras_info = load_cameras_info('./predictor/samples/')
 
 def save_file_into_store(path):
     return
@@ -91,21 +91,47 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     texture = attributes['textures']
     #lights = attributes['lights']
 
-    ''' in style_gan.py '''
-    # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
-    mv_images = style_gan.get_multiview_images(style_gan_models[category], torch.Tensor(cameras_info[category]), mesh, texture)
+    # For Test - kaolin 설치 되어야함
+    # cam_trans = torch.Tensor([
+    #         [
+    #             -0.9247869164945931,
+    #             0.36421738184289226,
+    #             0.11006751493484024,
+    #         ],
+    #         [
+    #             0.0,
+    #             0.28928181616007403,
+    #             -0.9572439766533554,
+    #         ],
+    #         [
+    #             -0.3804854255821404,
+    #             -0.8852467055022787,
+    #             -0.2675240387646306,
+    #         ],
+    #         [
+    #             0.0,
+    #             0.0,
+    #             -6.0000000000000004,
+    #         ]
+    #     ]).cuda()
+    #
+    # sample_image, sample_mask = diffRenderers[samples_per_categories[category]].render(mesh, texture, cam_trans)
 
-    # TODO: mask_rcnn을 사용할 지, IS_NET을 사용할 지 결정
-    ''' in mask.py '''
-    # 이미지들의 sementic mask 얻기
-    mv_masks = mask.detect_mask(mask_model,[mv_images])
+    # ''' in style_gan.py '''
+    # # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
+    # mv_images = style_gan.get_multiview_images(style_gan_models[category], torch.Tensor(cameras_info[category]), mesh, texture)
+    #
+    # # TODO: mask_rcnn을 사용할 지, IS_NET을 사용할 지 결정
+    # ''' in mask.py '''
+    # # 이미지들의 sementic mask 얻기
+    # mv_masks = mask.detect_mask(mask_model,[mv_images])
+    #
+    # ''' in predictor.py '''
+    # # 3D Object 생성
+    # bin_path, obj_path, thumb_nail_img = diffRenderers[samples_per_categories[category]].create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
+    #
+    # # 3D Object를 저장소에 저장
+    # save_file_into_store(bin_path)
+    # save_file_into_store(obj_path)
 
-    ''' in predictor.py '''
-    # 3D Object 생성
-    bin_path, obj_path, thumb_nail_img = diffRenderers[samples_per_categories[category]].create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
-    
-    # 3D Object를 저장소에 저장
-    save_file_into_store(bin_path)
-    save_file_into_store(obj_path)
-
-    return {"file_name": file.filename, "category" : category}
+    return {"mesh_shape": mesh.shape, "texture_shape" : texture.shape}

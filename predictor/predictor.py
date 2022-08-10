@@ -7,10 +7,9 @@ from kaolin.render.mesh import dibr_rasterization, texture_mapping, \
 
 # import
 import os
+import torch
 import time
 
-# import skimage
-# from skimage import io
 import aspose.threed as a3d
 from PIL import Image
 import numpy as np
@@ -30,13 +29,63 @@ def get_predictor_model(template_path, resume_path, image_size):
     netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32)
     netE = netE.cuda()
 
-    print("=> loading checkpoint '{}'".format(opt.resume))
+    print("=> loading checkpoint '{}'".format(resume_path))
     # Map model to be loaded to specified single gpu.
     checkpoint = torch.load(resume_path)
     netE.load_state_dict(checkpoint['netE'])
     print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
 
     return netE, diffRender
+
+class Timer:
+    def __init__(self, msg):
+        self.msg = msg
+        self.start_time = None
+
+    def __enter__(self):
+        self.start_time = time.time()
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        print(self.msg % (time.time() - self.start_time))
+
+#####################################################################
+# ------------------------- PerceptualLoss ------------------------ #
+#####################################################################
+
+class PerceptualLoss(object):
+    def __init__(self, model='net', net='alex', use_gpu=True):
+        print('Setting up Perceptual loss..')
+        self.model = dist_model.DistModel()
+        self.model.initialize(model=model, net=net, use_gpu=True)
+        print('Done')
+
+    def __call__(self, pred, target, normalize=True):
+        """
+        Pred and target are Variables.
+        If normalize is on, scales images between [-1, 1]
+        Assumes the inputs are in range [0, 1].
+        """
+        if normalize:
+            target = 2 * target - 1
+            pred = 2 * pred - 1
+
+        dist = self.model.forward_pair(target, pred)
+
+        return dist
+
+class PerceptualTextureLoss(object):
+    def __init__(self):
+        self.perceptual_loss = PerceptualLoss()
+
+    def __call__(self, img_pred, img_gt):
+        """
+        Input:
+          img_pred, img_gt: B x 3 x H x W
+        """
+
+        # Only use mask_gt..
+        dist = self.perceptual_loss(img_pred, img_gt)
+        return dist.mean()
 
 #####################################################################
 # ----------------------------- DIB_R ----------------------------- #
@@ -67,6 +116,8 @@ class DiffRender(object):
     laplacian_weight = 0.3  # ring -> 0.3 , shirts -> 0.01
     image_weight = 0.1
     mask_weight = 1.
+    perceptual_wight = 0.01
+    mov_weight = 0.5
 
     texture_lr = 3e-2
     vertice_lr = 5e-2
@@ -133,12 +184,12 @@ class DiffRender(object):
                                                  shuffle=True, pin_memory=True)
         return
 
-    def render(self, mesh, cam_transform):
+    def render(self, vertices, textures, cam_transform):
 
-        vertices = mesh.vertices
-        textures = mesh.texture_map
+        # vertices = mesh.vertices
+        # textures = mesh.texture_map
 
-        device = camera_pos.device
+        device = cam_transform.device
         cam_proj = self.cam_proj.to(device)
 
         faces = self.faces.to(device)
@@ -150,16 +201,16 @@ class DiffRender(object):
         # camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
 
         ### Prepare mesh data with projection regarding to camera ###
-        vertices_batch = recenter_vertices(mesh.vertices, vertice_shift)
+        vertices_batch = recenter_vertices(vertices, self.vertice_shift)
 
         face_vertices_camera, face_vertices_image, face_normals = \
-            prepare_vertices(vertices=vertices_batch.repeat(batch_size, 1, 1),
+            prepare_vertices(vertices=vertices_batch.repeat(self.batch_size, 1, 1),
                              faces=faces, camera_proj=cam_proj, camera_transform=cam_transform
                              )
 
         face_attributes = [
-            mesh.face_uvs.repeat(batch_size, 1, 1, 1),
-            torch.ones((batch_size, nb_faces, 3, 1), device='cuda')
+            self.face_uvs.repeat(self.batch_size, 1, 1, 1),
+            torch.ones((self.batch_size, self.nb_faces, 3, 1), device='cuda')
         ]
 
         image_features, soft_mask, face_idx = dibr_rasterization(
@@ -169,12 +220,12 @@ class DiffRender(object):
         # image_features is a tuple in composed of the interpolated attributes of face_attributes
         texture_coords, mask = image_features
         image = kal.render.mesh.texture_mapping(texture_coords,
-                                                mesh.texture_map.repeat(batch_size, 1, 1, 1),
+                                                textures.repeat(self.batch_size, 1, 1, 1),
                                                 mode='bilinear')
         render_img = image.permute(0, 3, 1, 2)
         render_silhouttes = soft_mask
 
-        return render_img, render_silhouttes, attributes
+        return render_img, render_silhouttes
 
     def train(self, mesh, camera_info):
         ## Separate vertices center as a learnable parameter
@@ -182,7 +233,7 @@ class DiffRender(object):
         vertices_init.requires_grad = False
 
         # This is the center of the optimized mesh, separating it as a learnable parameter helps the optimization.
-        vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
+        self.vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
                                     requires_grad=True)
 
         nb_faces = self.num_faces
@@ -201,27 +252,27 @@ class DiffRender(object):
         vertices_laplacian_matrix = self.vertices_laplacian_matrix
 
         # Set optimizer and scheduler
-        vertices_optim = torch.optim.Adam(params=[mesh.vertices, vertice_shift],
-                                          lr=vertice_lr)
-        texture_optim = torch.optim.Adam(params=[mesh.texture_map], lr=texture_lr)
+        vertices_optim = torch.optim.Adam(params=[mesh.vertices, self.vertice_shift],
+                                          lr=self.vertice_lr)
+        texture_optim = torch.optim.Adam(params=[mesh.texture_map], lr=self.texture_lr)
 
-        camera_optim = torch.optim.Adam(params=[camera_pos, object_pos, camera_up], lr=camera_lr)
+        camera_optim = torch.optim.Adam(params=[camera_pos, object_pos, camera_up], lr=self.camera_lr)
 
         vertices_scheduler = torch.optim.lr_scheduler.StepLR(
             vertices_optim,
-            step_size=scheduler_step_size,
-            gamma=scheduler_gamma)
+            step_size=self.scheduler_step_size,
+            gamma=self.scheduler_gamma)
         texture_scheduler = torch.optim.lr_scheduler.StepLR(
             texture_optim,
-            step_size=scheduler_step_size,
-            gamma=scheduler_gamma)
+            step_size=self.scheduler_step_size,
+            gamma=self.scheduler_gamma)
         camera_scheduler = torch.optim.lr_scheduler.StepLR(
             camera_optim,
-            step_size=scheduler_step_size,
-            gamma=scheduler_gamma)
+            step_size=self.scheduler_step_size,
+            gamma=self.scheduler_gamma)
 
         ## start train
-        for epoch in range(num_epoch):
+        for epoch in range(self.num_epoch):
             for idx, data in enumerate(self.dataloader):
                 vertices_optim.zero_grad()
                 texture_optim.zero_grad()
@@ -239,8 +290,8 @@ class DiffRender(object):
                 loss = self.calc_img_loss(pred_imgs, pred_masks, gt_imgs, gt_masks.squeeze(1))
 
                 # mesh regularization
-                loss_lap = self.calc_lap_loss(att)
-                loss_mov = self.calc_mov_loss(att) / 3.
+                loss_lap = self.calc_lap_loss(attributes)
+                loss_mov = self.calc_mov_loss(attributes) / 3.
 
                 total_loss = loss + loss_lap + loss_mov
                 ### Update the mesh ###
@@ -261,7 +312,7 @@ class DiffRender(object):
         loss_mask = kal.metrics.render.mask_iou(pred_mask, gt_mask)
         loss_perceptual = self.texture_loss(pred_img, gt_img)
 
-        loss_data = opt.image_weight * loss_image + opt.mask_weight * loss_mask + opt.perceptual_wight * loss_perceptual
+        loss_data = self.image_weight * loss_image + self.mask_weight * loss_mask + self.perceptual_wight * loss_perceptual
         return loss_data
 
     def calc_mov_loss(self, att):
@@ -270,7 +321,7 @@ class DiffRender(object):
         Nf[..., 2] *= -1
 
         loss_norm = (Na - Nf).norm(dim=2).mean()
-        return opt.mov_weight * loss_norm
+        return self.mov_weight * loss_norm
 
     def calc_lap_loss(self, att):
         # laplacian loss
@@ -283,7 +334,7 @@ class DiffRender(object):
         delta_vertices_laplacian = torch.matmul(vertices_laplacian_matrix, delta_vertices)
         loss_laplacian = torch.mean(delta_vertices_laplacian ** 2) * nb_vertices * 3
 
-        loss_reg = opt.laplacian_weight * loss_laplacian
+        loss_reg = self.laplacian_weight * loss_laplacian
         return loss_reg
 
     def create_3d_object(self, vertices, textures, images, masks, cameras_info, category):
@@ -309,7 +360,7 @@ class DiffRender(object):
 
         return bin_path, obj_file_path, thumb_img
 
-    def get_thumbnail(self, vertices, cameras_info):
+    def get_thumbnail(self, vertices, texture, camera_info):
         # This is similar to a training iteration (without the loss part)
         camera_pos = camera_info[0][self.thumb_nail_id].cuda()
         object_pos = camera_info[1][self.thumb_nail_id].cuda()
@@ -325,8 +376,8 @@ class DiffRender(object):
             )
 
         face_attributes = [
-            self.face_uvs.repeat(test_batch_size, 1, 1, 1),
-            torch.ones((test_batch_size, nb_faces, 3, 1), device='cuda'),
+            self.face_uvs.repeat(self.test_batch_size, 1, 1, 1),
+            torch.ones((self.test_batch_size, self.nb_faces, 3, 1), device='cuda'),
         ]
 
         image_features, soft_mask, face_idx = kal.render.mesh.dibr_rasterization(
@@ -335,7 +386,7 @@ class DiffRender(object):
 
         texture_coords, mask = image_features
         image = kal.render.mesh.texture_mapping(texture_coords,
-                                                texture_map.repeat(test_batch_size, 1, 1, 1),
+                                                texture.repeat(self.test_batch_size, 1, 1, 1),
                                                 mode='bilinear')
         image = torch.clamp(image * mask + torch.ones_like(image) * (1 - mask), 0., 1.)
 
