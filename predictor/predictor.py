@@ -191,7 +191,7 @@ class DiffRender(object):
     def render(self, vertices, textures, cam_transform):
 
         # vertices = mesh.vertices
-        # textures = mesh.texture_map 
+        # textures = mesh.texture_map
 
         device = cam_transform.device
         cam_proj = self.cam_proj.to(device)

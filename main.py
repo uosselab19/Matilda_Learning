@@ -120,8 +120,8 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     
     sample_image, sample_mask = diffRenderers[samples_per_categories[category]].render(mesh, texture, cam_trans)
 
-    cv2.imwrite(sample_image.cpu().numpy(), 'a.png')
-    cv2.imwrite(sample_mask.cpu().numpy(), 'b.png')
+    cv2.imwrite(sample_image.cpu().detach().numpy(), 'a.png')
+    cv2.imwrite(sample_mask.cpu().detach().numpy(), 'b.png')
 
     # ''' in style_gan.py '''
     # # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
