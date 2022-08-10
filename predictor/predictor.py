@@ -138,7 +138,7 @@ class DiffRender(object):
         mesh = kal.io.obj.import_mesh(filename_obj, with_materials=True)
 
         # get vertices_init
-        vertices = mesh.vertices
+        vertices = mesh.vertices.cuda()
         vertices.requires_grad = False
         vertices_max = vertices.max(0, True)[0]
         vertices_min = vertices.min(0, True)[0]
@@ -147,8 +147,8 @@ class DiffRender(object):
 
         # get face_uvs
         faces = mesh.faces
-        uvs = mesh.uvs.unsqueeze(0)
-        face_uvs_idx = mesh.face_uvs_idx
+        uvs = mesh.uvs.cuda().unsqueeze(0)
+        face_uvs_idx = mesh.face_uvs_idx.cuda()
         face_uvs = kal.ops.mesh.index_vertices_by_faces(uvs, face_uvs_idx).detach()
         face_uvs.requires_grad = False
 
@@ -195,9 +195,6 @@ class DiffRender(object):
 
         device = cam_transform.device
         cam_proj = self.cam_proj.to(device)
-
-        print(device)
-
         faces = self.faces.to(device)
 
         # object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
