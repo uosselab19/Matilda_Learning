@@ -202,7 +202,7 @@ class DiffRender(object):
         # camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
 
         ### Prepare mesh data with projection regarding to camera ###
-        vertices_batch = recenter_vertices(vertices, self.vertice_shift)
+        vertices_batch = recenter_vertices(vertices, self.vertice_shift).to(device)
 
         face_vertices_camera, face_vertices_image, face_normals = \
             prepare_vertices(vertices=vertices_batch.repeat(self.batch_size, 1, 1),
