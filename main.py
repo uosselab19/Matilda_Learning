@@ -48,7 +48,7 @@ def get_all_models():
     #mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
     #mask_model = mask.get_mask_model(mask_weights_path)
 
-    return style_gan_models, predictor_models, diffRenderers
+    return predictor_models, diffRenderers
 
 def load_cameras_info(root):
     cameras_info = {}
@@ -56,7 +56,7 @@ def load_cameras_info(root):
         cameras_info[category] = np.load(f'{root}{category}.npy')
     return cameras_info
 
-style_gan_models, predictor_models, diffRenderers = get_all_models()
+predictor_models, diffRenderers = get_all_models()
 
 # 카메라 정보 불러오기
 #cameras_info = load_cameras_info('./predictor/samples/')
@@ -83,7 +83,7 @@ async def root():
 
 @app.post("/convert/")
 async def convert(file: UploadFile = File(...), category : str = Form(...)):
-    image = load_into_numpy_array_and_resize(await file.read(),style_gan_models[category].img_resolution)
+    image = load_into_numpy_array_and_resize(await file.read(),512)
 
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
