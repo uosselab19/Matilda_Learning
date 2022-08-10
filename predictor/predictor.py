@@ -17,7 +17,7 @@ import numpy as np
 from pxr import Gf, Kind, Sdf, Usd, UsdGeom, UsdShade, Vt
 import posixpath
 
-from PerceptualSimilarity.models import dist_model
+#from PerceptualSimilarity.models import dist_model
 
 ### get_model ###
 def get_predictor_model(template_path, resume_path, image_size):
