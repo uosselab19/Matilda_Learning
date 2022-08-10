@@ -4,6 +4,7 @@ from PIL import Image
 from PIL import ImageOps
 from io import BytesIO
 import numpy as np
+import cv2
 import torch
 
 sys.path.append('./mask')
@@ -87,37 +88,40 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
-    attributes = predictor_models[category](torch.Tensor(image.transpose(2, 0, 1)).unsqueeze(0))
+    attributes = predictor_models[category](torch.Tensor(image).unsqueeze(0))
 
-    mesh = attributes['vertices']
-    texture = attributes['textures']
+    mesh = attributes['vertices'][0]
+    texture = attributes['textures'][0]
     #lights = attributes['lights']
 
     # For Test - kaolin 설치 되어야함
-    # cam_trans = torch.Tensor([
-    #         [
-    #             -0.9247869164945931,
-    #             0.36421738184289226,
-    #             0.11006751493484024,
-    #         ],
-    #         [
-    #             0.0,
-    #             0.28928181616007403,
-    #             -0.9572439766533554,
-    #         ],
-    #         [
-    #             -0.3804854255821404,
-    #             -0.8852467055022787,
-    #             -0.2675240387646306,
-    #         ],
-    #         [
-    #             0.0,
-    #             0.0,
-    #             -6.0000000000000004,
-    #         ]
-    #     ]).cuda()
-    #
-    # sample_image, sample_mask = diffRenderers[samples_per_categories[category]].render(mesh, texture, cam_trans)
+    cam_trans = torch.Tensor([
+            [
+                -0.9247869164945931,
+                0.36421738184289226,
+                0.11006751493484024,
+            ],
+            [
+                0.0,
+                0.28928181616007403,
+                -0.9572439766533554,
+            ],
+            [
+                -0.3804854255821404,
+                -0.8852467055022787,
+                -0.2675240387646306,
+            ],
+            [
+                0.0,
+                0.0,
+                -6.0000000000000004,
+            ]
+        ]).cuda()
+    
+    sample_image, sample_mask = diffRenderers[samples_per_categories[category]].render(mesh, texture, cam_trans)
+
+    cv2.imwrite(sample_image.cpu().numpy(), 'a.png')
+    cv2.imwrite(sample_mask.cpu().numpy(), 'b.png')
 
     # ''' in style_gan.py '''
     # # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
@@ -136,4 +140,4 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     # save_file_into_store(bin_path)
     # save_file_into_store(obj_path)
 
-    return {"mesh_shape": mesh.shape, "texture_shape" : texture.shape}
+    return {"sample_image": sample_image.shape, "sample_mask" : sample_mask.shape}
