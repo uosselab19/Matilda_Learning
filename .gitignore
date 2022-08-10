@@ -307,3 +307,7 @@ cython_debug/
 /mask/test_imgs/*
 /mask/logs/*
 /style_gan/network/pkl/*
+
+
+### Image Storage ###
+path.txt
