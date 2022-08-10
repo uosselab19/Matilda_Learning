@@ -9,6 +9,7 @@ import torch
 sys.path.append('./mask')
 sys.path.append('./style_gan')
 sys.path.append('./predictor')
+sys.path.append('./predictor/PerceptualSimilarity')
 
 from style_gan import style_gan
 #from mask import mask
