@@ -88,7 +88,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
-    attributes = predictor_models[category](torch.Tensor(image).unsqueeze(0))
+    attributes = predictor_models[category](torch.Tensor(image).unsqueeze(0).repeat(2,1,1,1).cuda())
 
     mesh = attributes['vertices'][0]
     texture = attributes['textures'][0]
