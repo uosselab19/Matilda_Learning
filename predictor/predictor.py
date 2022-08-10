@@ -197,9 +197,6 @@ class DiffRender(object):
         cam_proj = self.cam_proj.to(device)
 
         faces = self.faces.to(device)
-        face_uvs = self.face_uvs.to(device)
-
-        num_faces = faces.shape[0]
 
         # object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
         # camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
@@ -214,7 +211,7 @@ class DiffRender(object):
 
         face_attributes = [
             self.face_uvs.repeat(self.batch_size, 1, 1, 1),
-            torch.ones((self.batch_size, self.nb_faces, 3, 1), device='cuda')
+            torch.ones((self.batch_size, self.num_faces, 3, 1), device='cuda')
         ]
 
         image_features, soft_mask, face_idx = dibr_rasterization(
