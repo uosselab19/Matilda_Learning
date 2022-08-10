@@ -164,6 +164,10 @@ class DiffRender(object):
         ## Set up auxiliary laplacian matrix for the laplacian loss
         vertices_laplacian_matrix = kal.ops.mesh.uniform_laplacian(self.num_vertices, faces)
 
+        # This is the center of the optimized mesh, separating it as a learnable parameter helps the optimization.
+        self.vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
+                                    requires_grad=True)
+
         self.vertices_init = vertices_init
         self.faces = faces
         self.uvs = uvs
