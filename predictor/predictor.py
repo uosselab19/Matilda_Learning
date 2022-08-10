@@ -196,6 +196,8 @@ class DiffRender(object):
         device = cam_transform.device
         cam_proj = self.cam_proj.to(device)
 
+        print(device)
+
         faces = self.faces.to(device)
 
         # object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
