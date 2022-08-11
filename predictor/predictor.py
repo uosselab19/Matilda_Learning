@@ -399,19 +399,23 @@ class DiffRender(object):
         time = Usd.TimeCode.Default()
 
         # 저장할 object name setting
-        mesh_name = f'{category}_{time}_obj'
+        mesh_name = f'mesh_{category}_{time}'
         ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
-
-        # save texture
         usd_dir = os.path.dirname(ind_out_path)
 
-        texture_dir = 'textures'
-        rel_filepath = posixpath.join(texture_dir, f'{mesh_name}_diffuse.png')
-
-        img_tensor = torch.clamp(self.textures[0], 0., 1.)
+        # save texture
+        img_tensor = torch.clamp(self.textures, 0., 1.)
         img_tensor_uint8 = (img_tensor * 255.).clamp_(0, 255).permute(1, 2, 0).to(torch.uint8)
         img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
-        img.save(posixpath.join(usd_dir, rel_filepath))
+
+        texture_dir = posixpath.join(usd_dir, 'textures')
+        rel_filepath = posixpath.join('textures', f'{mesh_name}_diffuse.png')
+
+        if not os.path.exists(texture_dir):
+            os.makedirs(texture_dir)
+
+        texture_file = f'{mesh_name}_diffuse.png'
+        img.save(posixpath.join(texture_dir, texture_file))
 
         # create stage
         scene_path = "/TexModel"
