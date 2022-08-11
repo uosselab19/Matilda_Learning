@@ -401,14 +401,13 @@ class DiffRender(object):
         # 저장할 object name setting
         mesh_name = f'mesh_{category}_{time}'
         ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
-        usd_dir = os.path.dirname(ind_out_path)
 
         # save texture
         img_tensor = torch.clamp(self.textures[0], 0., 1.)
         img_tensor_uint8 = (img_tensor * 255.).clamp_(0, 255).permute(1, 2, 0).to(torch.uint8)
         img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
 
-        texture_dir = posixpath.join(usd_dir, 'textures')
+        texture_dir = posixpath.join(save_path, 'textures')
         rel_filepath = posixpath.join('textures', f'{mesh_name}_diffuse.png')
 
         if not os.path.exists(texture_dir):
