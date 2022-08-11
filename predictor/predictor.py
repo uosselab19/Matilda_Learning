@@ -35,7 +35,7 @@ def get_predictor_model(template_path, resume_path, image_size):
     netE.load_state_dict(checkpoint['netE'])
     print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
 
-    return netE, diffRender
+    return netE.eval(), diffRender
 
 class Timer:
     def __init__(self, msg):
@@ -99,15 +99,6 @@ def recenter_vertices(vertices, vertice_shift):
     vertices = vertices - vertices_mid + vertice_shift
     return vertices
 
-class Mesh():
-    def __init__(self, vertices, textures, faces, uvs, face_uvs, face_uvs_idx):
-        self.vertices = vertices,
-        self.textures = textures,
-        self.faces = faces,
-        self.uvs = uvs,
-        self.face_uvs = face_uvs,
-        self.face_uvs_idx = face_uvs_idx
-
 class DiffRender(object):
     # Hyperparameters
     num_epoch = 210
@@ -154,7 +145,6 @@ class DiffRender(object):
 
         self.num_faces = faces.shape[0]
         self.num_vertices = vertices_init.shape[0]
-        face_size = 3
 
         # flip index
         vertex_center_flip = vertices_init.clone()
@@ -188,10 +178,7 @@ class DiffRender(object):
                                                  shuffle=True, pin_memory=True)
         return
 
-    def render(self, vertices, textures, cam_transform):
-
-        # vertices = mesh.vertices
-        # textures = mesh.texture_map
+    def render(self, cam_transform):
 
         device = cam_transform.device
         cam_proj = self.cam_proj.to(device)
@@ -201,7 +188,7 @@ class DiffRender(object):
         # camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
 
         ### Prepare mesh data with projection regarding to camera ###
-        vertices_batch = recenter_vertices(vertices, self.vertice_shift).to(device)
+        vertices_batch = recenter_vertices(self.vertices, self.vertice_shift).to(device)
 
         face_vertices_camera, face_vertices_image, face_normals = \
             prepare_vertices(vertices=vertices_batch.repeat(self.batch_size, 1, 1),
@@ -220,14 +207,14 @@ class DiffRender(object):
         # image_features is a tuple in composed of the interpolated attributes of face_attributes
         texture_coords, mask = image_features
         image = kal.render.mesh.texture_mapping(texture_coords,
-                                                textures.repeat(self.batch_size, 1, 1, 1),
+                                                self.textures.repeat(self.batch_size, 1, 1, 1),
                                                 mode='bilinear')
         render_img = image.permute(0, 3, 1, 2)
         render_silhouttes = soft_mask
 
         return render_img, render_silhouttes
 
-    def train(self, mesh, camera_info):
+    def train(self, camera_info):
         ## Separate vertices center as a learnable parameter
         vertices_init = self.vertices_init
         vertices_init.requires_grad = False
@@ -252,9 +239,9 @@ class DiffRender(object):
         vertices_laplacian_matrix = self.vertices_laplacian_matrix
 
         # Set optimizer and scheduler
-        vertices_optim = torch.optim.Adam(params=[mesh.vertices, self.vertice_shift],
+        vertices_optim = torch.optim.Adam(params=[self.vertices, self.vertice_shift],
                                           lr=self.vertice_lr)
-        texture_optim = torch.optim.Adam(params=[mesh.texture_map], lr=self.texture_lr)
+        texture_optim = torch.optim.Adam(params=[self.textures], lr=self.texture_lr)
 
         camera_optim = torch.optim.Adam(params=[camera_pos, object_pos, camera_up], lr=self.camera_lr)
 
@@ -283,7 +270,7 @@ class DiffRender(object):
 
                 cam_transform = generate_transformation_matrix(camera_pos[data['view_num']], object_pos[data['view_num']], camera_up[data['view_num']])
 
-                pred_imgs, pred_masks, attributes = self.render(mesh)
+                pred_imgs, pred_masks, attributes = self.render(self.vertices, self.texture_map, cam_transform)
 
                 ### Compute Losses ###
                 # img, mask loss
@@ -346,25 +333,42 @@ class DiffRender(object):
         # dataloader 세팅
         self.set_dataloader(images, masks, cameras_info)
 
-        # 초기 mesh 정보 가져오기
-        mesh = Mesh(vertices, textures, self.faces, self.uvs, self.face_uvs, self.face_uvs_idx)
+        # vertices, textures 저장
+        self.vertices = vertices
+        self.textures = textures
 
         # train
-        self.train(mesh)
+        self.train()
 
         # save object
-        bin_path, obj_file_path = self.export_into_gltf(save_path, mesh, category)
+        bin_path, obj_file_path = self.export_into_gltf(save_path, self.vertices, self.textures, category)
 
         # get thumbnail img
-        thumb_img = self.get_thumbnail(mesh,cameras_info)
+        thumb_img = self.get_thumbnail(self.vertices, self.textures,cameras_info)
 
         return bin_path, obj_file_path, thumb_img
 
-    def get_thumbnail(self, vertices, texture, camera_info):
+    def create_3d_object_not_train(self, vertices, textures, cameras_pos, category):
+        # path to the rendered image (using the data synthesizer)
+
+        save_path = f'/save/{category}/'
+
+        # vertices, textures 저장
+        self.vertices = vertices
+        self.textures = textures
+
+        # save object
+        obj_dir_path = self.export_into_gltf(save_path, category)
+
+        # get thumbnail img
+        thumb_img = self.get_thumbnail(cameras_pos)
+
+        return obj_dir_path, thumb_img
+
+    def get_thumbnail(self, camera_pos):
         # This is similar to a training iteration (without the loss part)
-        camera_pos = camera_info[0][self.thumb_nail_id].cuda()
-        object_pos = camera_info[1][self.thumb_nail_id].cuda()
-        camera_up = camera_info[2][self.thumb_nail_id].cuda()
+        object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float).cuda()
+        camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float).cuda()
 
         cam_transform = kal.render.camera.generate_transformation_matrix(camera_pos, object_pos, camera_up)
 
@@ -372,7 +376,7 @@ class DiffRender(object):
 
         face_vertices_camera, face_vertices_image, face_normals = \
             kal.render.mesh.prepare_vertices(
-                vertices, self.faces, cam_proj, camera_transform=cam_transform
+                self.vertices, self.faces, cam_proj, camera_transform=cam_transform
             )
 
         face_attributes = [
@@ -386,17 +390,17 @@ class DiffRender(object):
 
         texture_coords, mask = image_features
         image = kal.render.mesh.texture_mapping(texture_coords,
-                                                texture.repeat(self.test_batch_size, 1, 1, 1),
+                                                self.texture.repeat(self.test_batch_size, 1, 1, 1),
                                                 mode='bilinear')
         image = torch.clamp(image * mask + torch.ones_like(image) * (1 - mask), 0., 1.)
 
         return image
 
-    def export_into_gltf(self, save_path, mesh, category):
+    def export_into_gltf(self, save_path, category):
         time = Usd.TimeCode.Default()
 
         # 저장할 object name setting
-        mesh_name = 'obj'
+        mesh_name = f'{category}_{time}_obj'
         ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
 
         # save texture
@@ -405,7 +409,7 @@ class DiffRender(object):
         texture_dir = 'textures'
         rel_filepath = posixpath.join(texture_dir, f'{mesh_name}_diffuse.png')
 
-        img_tensor = torch.clamp(mesh.texture_map[0], 0., 1.)
+        img_tensor = torch.clamp(self.textures[0], 0., 1.)
         img_tensor_uint8 = (img_tensor * 255.).clamp_(0, 255).permute(1, 2, 0).to(torch.uint8)
         img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
         img.save(posixpath.join(usd_dir, rel_filepath))
@@ -425,23 +429,23 @@ class DiffRender(object):
         usd_mesh = UsdGeom.Mesh.Define(stage, f'{scene_path}/{category}')
 
         # face
-        num_faces = mesh.faces.size(0)
-        face_vertex_counts = [mesh.faces.size(1)] * num_faces
-        faces_list = mesh.faces.view(-1).cpu().long().numpy()
+        num_faces = self.faces.size(0)
+        face_vertex_counts = [self.faces.size(1)] * num_faces
+        faces_list = self.faces.view(-1).cpu().long().numpy()
         usd_mesh.GetFaceVertexCountsAttr().Set(face_vertex_counts, time=time)
         usd_mesh.GetFaceVertexIndicesAttr().Set(faces_list, time=time)
 
         # vertices
-        vertices_list = mesh.vertices.detach().cpu().float().numpy()
+        vertices_list = self.vertices.detach().cpu().float().numpy()
         usd_mesh.GetPointsAttr().Set(Vt.Vec3fArray.FromNumpy(vertices_list), time=time)
 
         # uvs
-        uvs_list = mesh.uvs.view(-1, 2).detach().cpu().float().numpy()
+        uvs_list = self.uvs.view(-1, 2).detach().cpu().float().numpy()
         pv = UsdGeom.PrimvarsAPI(usd_mesh.GetPrim()).CreatePrimvar(
             'st', Sdf.ValueTypeNames.TexCoord2fArray)
         pv.Set(uvs_list, time=time)
         pv.SetInterpolation('faceVarying')
-        pv.SetIndices(Vt.IntArray.FromNumpy(mesh.face_uvs_idx.view(-1).cpu().long().numpy()), time=time)
+        pv.SetIndices(Vt.IntArray.FromNumpy(self.face_uvs_idx.view(-1).cpu().long().numpy()), time=time)
 
         # material
         material_path = f'{scene_path}/{category}Mat'
@@ -474,11 +478,11 @@ class DiffRender(object):
 
         stage.Save()
 
-        save_file_path = f"{save_path}obj_{time}.gltf"
-        bin_path = f"{save_path}buffer.bin"
+        save_file_path = f"{save_path}{category}_{time}.gltf"
+        # bin_path = f"{save_path}buffer.bin"
 
         scn = a3d.Scene()
         scn.open(ind_out_path)
         scn.save(save_file_path, a3d.FileFormat.GLTF2)
 
-        return bin_path, save_file_path
+        return save_path

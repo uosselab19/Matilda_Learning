@@ -21,9 +21,9 @@ from predictor import predictor
 app = FastAPI()
 
 # categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
-categories = ['bird'] # for test
+categories = ['bird','shirts'] # for test
 #samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
-samples_per_categories = {'bird' : 'sphere'}
+samples_per_categories = {'bird' : 'sphere' ,'shirts' : 'sphere'}
 
 def get_all_models():
     image_size = 512
@@ -82,46 +82,20 @@ def load_into_numpy_array_and_resize(data, resolution):
 async def root():
     return {"Welcome"}
 
-@app.post("/convert/")
+@app.post("/convert")
 async def convert(file: UploadFile = File(...), category : str = Form(...)):
     image = load_into_numpy_array_and_resize(await file.read(),512)
 
+    predictor = predictor_models[category]
+    dib_r = diffRenderers[samples_per_categories[category]]
+
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
-    attributes = predictor_models[category](torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).repeat(2,1,1,1).cuda())
+    attributes = predictor(torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).cuda())
 
     mesh = attributes['vertices'][0]
     texture = attributes['textures'][0]
     #lights = attributes['lights']
-
-    # For Test - kaolin 설치 되어야함
-    cam_trans = torch.Tensor([
-            [
-                -0.9247869164945931,
-                0.36421738184289226,
-                0.11006751493484024,
-            ],
-            [
-                0.0,
-                0.28928181616007403,
-                -0.9572439766533554,
-            ],
-            [
-                -0.3804854255821404,
-                -0.8852467055022787,
-                -0.2675240387646306,
-            ],
-            [
-                0.0,
-                0.0,
-                -6.0000000000000004,
-            ]
-        ]).cuda()
-    
-    sample_image, sample_mask = diffRenderers[samples_per_categories[category]].render(mesh, texture, cam_trans)
-
-    cv2.imwrite("a.png", sample_image[0].permute(1,2,0).cpu().detach().numpy())
-    cv2.imwrite("b.png", sample_mask.permute(1,2,0).cpu().detach().numpy())
 
     # ''' in style_gan.py '''
     # # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
@@ -132,12 +106,18 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     # # 이미지들의 sementic mask 얻기
     # mv_masks = mask.detect_mask(mask_model,[mv_images])
     #
-    # ''' in predictor.py '''
-    # # 3D Object 생성
-    # bin_path, obj_path, thumb_nail_img = diffRenderers[samples_per_categories[category]].create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
-    #
+    ''' in predictor.py '''
+    # 3D Object 생성
+    # obj_dir_path, thumb_nail_img = dib_r.create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
+
+    # For Test
+    cam_pos = object_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
+    obj_dir_path, thumb_nail_img = dib_r.create_3d_object(mesh, texture, cam_pos,category)
+
+    cv2.imwrite(f"{category}_thumbnail.png", thumb_nail_img[0].permute(1,2,0).cpu().detach().numpy())
+
     # # 3D Object를 저장소에 저장
     # save_file_into_store(bin_path)
     # save_file_into_store(obj_path)
 
-    return {"sample_image": sample_image.shape, "sample_mask" : sample_mask.shape}
+    return {"thumb_nail_img": thumb_nail_img.shape, "obj_file_path" : obj_dir_path}

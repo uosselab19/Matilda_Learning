@@ -9,3 +9,8 @@ torchaudio==0.7.2
 requests
 scikit-image
 matplotlib
+cython==0.29.20
+usd-core==22.3
+aspose-3d
+opencv-python
+python-multipart
