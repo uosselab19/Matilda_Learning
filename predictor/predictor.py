@@ -1,4 +1,4 @@
-from .network import networks
+from network import networks
 # import kaolin related
 import kaolin as kal
 from kaolin.render.camera import generate_perspective_projection, generate_transformation_matrix

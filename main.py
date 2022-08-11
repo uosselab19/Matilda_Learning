@@ -13,12 +13,6 @@ import jwt
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
-sys.path.append('./mask')
-sys.path.append('./style_gan')
-sys.path.append('./predictor')
-sys.path.append('./predictor/PerceptualSimilarity')
-sys.path.append('./predictor/network')
-
 from style_gan import style_gan
 #from mask import mask
 from predictor import predictor
