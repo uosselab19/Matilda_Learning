@@ -17,33 +17,21 @@ def deep_copy(att, index=None, detach=False):
                 copy_att[key] = value[index].clone()
     return copy_att
 
-
 def convblock(indim, outdim, ker, stride, pad):
-    block = [
+    block2 = [
         nn.Conv2d(indim, outdim, ker, stride, pad),
         nn.BatchNorm2d(outdim),
         nn.ReLU()
     ]
-    return block
-
-
-def convtransblock(indim, outdim, ker, stride, pad, scale_factor=2, padding_mode='zeros'):
-    block = [
-        nn.Upsample(scale_factor=scale_factor),
-        nn.Conv2d(indim, outdim, ker, stride, pad, padding_mode=padding_mode),
-        nn.BatchNorm2d(outdim),
-        nn.ReLU(True),
-    ]
-    return block
-
+    return block2
 
 def linearblock(indim, outdim):
-    block = [
+    block2 = [
         nn.Linear(indim, outdim),
-        nn.BatchNorm1d(outdim),
+        # nn.BatchNorm1d(outdim),
         nn.ReLU()
     ]
-    return block
+    return block2
 
 
 class ShapeEncoder(nn.Module):
@@ -174,19 +162,6 @@ class TextureEncoder(nn.Module):
         all_blocks = linear1 + linear2
         self.encoder2 = nn.Sequential(*all_blocks)
 
-        tex_block1 = convtransblock(nf * 8, nf * 8, 3, stride=1, pad=1, scale_factor=4)
-        tex_block2 = convtransblock(nf * 8, nf * 8, 3, stride=1, pad=1, scale_factor=2, padding_mode='reflect')
-        tex_block3 = convtransblock(nf * 8, nf * 4, 3, stride=1, pad=1, scale_factor=2, padding_mode='reflect')
-        tex_block4 = convtransblock(nf * 4, nf * 2, 3, stride=1, pad=1, scale_factor=2, padding_mode='reflect')
-        tex_block5 = convtransblock(nf * 2, nf * 2, 3, stride=1, pad=1, scale_factor=2, padding_mode='reflect')
-        tex_block6 = convtransblock(nf * 2, nf, 3, stride=1, pad=1, scale_factor=2, padding_mode='reflect')
-        tex_block_last = [nn.Upsample(scale_factor=2),
-                          nn.Conv2d(nf, 3, 3, 1, 1, padding_mode='reflect'),
-                          nn.Tanh()]
-
-        all_blocks = tex_block1 + tex_block2 + tex_block3 + tex_block4 + tex_block5 + tex_block6 + tex_block_last
-        self.texture_flow = nn.Sequential(*all_blocks)
-
         # Initialize with Xavier Glorot
         for m in self.modules():
             if isinstance(m, nn.ConvTranspose2d) \
@@ -196,7 +171,45 @@ class TextureEncoder(nn.Module):
                 nn.init.normal_(m.weight, mean=0, std=0.001)
 
         # Free some memory
-        del all_blocks, block1, block2, block3, block4, block5, linear1, linear2, tex_block1, tex_block2, tex_block3, tex_block4, tex_block5, tex_block_last
+        del all_blocks, block1, block2, block3, block4, block5, linear1, linear2
+
+        self.texture_flow = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.Upsample(scale_factor=4),
+            nn.Conv2d(nf * 8, nf * 8, 3, 1, 1),
+            nn.BatchNorm2d(nf * 8),
+            nn.ReLU(True),
+
+            # state size. (nf*8) x 8 x 8
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, padding_mode='reflect'),
+            nn.BatchNorm2d(nf * 8),
+            nn.ReLU(True),
+            # state size. (nf*4) x 16 x 16
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(nf * 8, nf * 4, 3, 1, 1, padding_mode='reflect'),
+            nn.BatchNorm2d(nf * 4),
+            nn.ReLU(True),
+            # state size. (nf*2) x 32 x 32
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(nf * 4, nf * 2, 3, 1, 1, padding_mode='reflect'),
+            nn.BatchNorm2d(nf * 2),
+            nn.ReLU(True),
+            # state size. (nf) x 64 x 64
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(nf * 2, nf * 2, 3, 1, 1, padding_mode='reflect'),
+            nn.BatchNorm2d(nf * 2),
+            nn.ReLU(True),
+            # state size. (nf) x 128 x 128
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(nf * 2, nf, 3, 1, 1, padding_mode='reflect'),
+            nn.BatchNorm2d(nf),
+            nn.ReLU(True),
+            # state size. (nf) x 256 x 256
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(nf, 3, 3, 1, 1, padding_mode='reflect'),
+            nn.Tanh()
+        )
 
     def forward(self, x):
         img = x[:, :3]
