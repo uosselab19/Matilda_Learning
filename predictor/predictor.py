@@ -350,7 +350,7 @@ class DiffRender(object):
     def create_3d_object_not_train(self, vertices, textures, cameras_pos, category):
         # path to the rendered image (using the data synthesizer)
 
-        save_path = f'/save/{category}/'
+        save_path = f'./save/{category}/'
 
         # vertices, textures 저장
         self.vertices = vertices
