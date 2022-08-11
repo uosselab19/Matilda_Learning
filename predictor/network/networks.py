@@ -234,11 +234,7 @@ class TextureEncoder(nn.Module):
             nn.ReLU(True),
             # state size. (nf) x 256 x 256
             nn.Upsample(scale_factor=2),
-            nn.Conv2d(nf, 2, 3, 1, 1, padding_mode='reflect'),
-            # nn.BatchNorm2d(nf),
-            # nn.ReLU(True),
-            #
-            # nn.Conv2d(nf, 2, 5, 1, 2, padding_mode='reflect'),
+            nn.Conv2d(nf, 3, 3, 1, 1, padding_mode='reflect'),
             nn.Tanh()
         )
 
