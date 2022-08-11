@@ -17,13 +17,13 @@ from style_gan import style_gan
 #from mask import mask
 from predictor import predictor
 
-# start : uvicorn main:app --reload
+# start : uvicorn main:app --reload --host 0.0.0.0
 app = FastAPI()
 
 # categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
-categories = ['bird','shirts'] # for test
+categories = ['shirts'] # for test
 #samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
-samples_per_categories = {'bird' : 'sphere' ,'shirts' : 'sphere'}
+samples_per_categories = {'shirts' : 'sphere'}
 
 def get_all_models():
     image_size = 512

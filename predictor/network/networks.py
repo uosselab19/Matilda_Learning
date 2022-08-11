@@ -264,8 +264,7 @@ class TextureEncoder(nn.Module):
         x = self.encoder1(x)
         x = x.view(batch_size, -1, 1, 1)
         x = self.encoder2(x)
-        uv_sampler = self.texture_flow(x).permute(0, 2, 3, 1)
-        textures = F.grid_sample(img, uv_sampler)
+        textures = (self.texture_flow(x) + 1) / 2 # (batch_size, 3, 256, 256)
 
         return textures
 
