@@ -397,7 +397,7 @@ class DiffRender(object):
         ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
 
         # save texture
-        img_tensor = torch.clamp(self.textures[0], 0., 1.)
+        img_tensor = torch.clamp(self.textures, 0., 1.)
         img_tensor_uint8 = (img_tensor * 255.).clamp_(0, 255).permute(1, 2, 0).to(torch.uint8)
         img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
 
