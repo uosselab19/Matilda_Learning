@@ -27,6 +27,7 @@ def get_predictor_model(template_path, resume_path, image_size):
 
     # netE: 3D attribute encoder: Light, Shape, and Texture
     netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32)
+    netE.eval()
     netE = netE.cuda()
 
     print("=> loading checkpoint '{}'".format(resume_path))
@@ -34,8 +35,6 @@ def get_predictor_model(template_path, resume_path, image_size):
     checkpoint = torch.load(resume_path)
     netE.load_state_dict(checkpoint['netE'])
     print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
-
-    netE.eval()
 
     return netE, diffRender
 
