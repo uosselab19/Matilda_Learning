@@ -1,89 +1,106 @@
-import sys
-from fastapi import FastAPI, File, Form, UploadFile
-from PIL import Image
-from io import BytesIO
-import numpy as np
-import torch
-
-sys.path.append('./mask')
-sys.path.append('./style_gan')
-sys.path.append('./predictor')
-
-from style_gan import style_gan
-from mask import mask
-from predictor import predictor
+import os
+import httpx
+import jwt
+from fastapi import FastAPI, File, Form, UploadFile, Header
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 # start : uvicorn main:app --reload
 app = FastAPI()
 
-categories = ['ring','shirts','pants','hat','necklace','bag']
+origins = [
+    "http://localhost:3000",
+    "http://3.133.233.81:3000"
+    "https://localhost:3000",
+    "https://3.133.233.81:3000"
+]
 
-# style_gan 모델 불러오기
-style_gan_network_path = "./style_gan/network/shirts.pkl"
-style_gan_model = style_gan.get_models(style_gan_network_path)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# 3d 속성 predictor 모델, diffRender 불러오기
-predictor_model_path = './predictor/network/latest_ckpt.pth'
+# Image Storage 위치 지정 및 디렉토리 확인
+path = os.environ.get("ImageStorage") + '\\items'
 
-# TODO: 카테고리 별로 init_mesh 다르게 설정하기
-init_mesh_path = './predictor/samples/sphere.obj'
-predictor_model, diffRender = predictor.get_predictor_model(init_mesh_path,predictor_model_path,style_gan_model.img_resolution)
+if not os.path.exists(path):
+    print("지정된 Image Storage 경로를 찾지 못했습니다.")
+    print("프로그램을 종료합니다.")
+    exit()
 
-# mask_rcnn 모델 불러오기
-mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
-mask_rcnn_model = mask.get_mask_model(mask_weights_path)
+categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
+for cate in categories:
+    if not os.path.exists(os.path.join(path, cate)):
+        print("지정된 Image Storage에서 다음 카테고리에 해당하는 디렉토리를 찾지 못했습니다.: " + cate)
+        print("프로그램을 종료합니다.")
+        exit()
 
-# 카메라 정보 불러오기
-cameras_info = load_cameras_info('./predictor/samples/')
 
-def save_file_into_store(path):
-    return
+# Image Storage에 gltf, bin, thumbImg를 저장
+def save_file_into_storage(title: str, catCode: str, gltf: bytes, bin: bytes, thumbImg: bytes):
+    dirName = catCode + '\\' + str(int(datetime.now().timestamp())) + '_' + title
+    saveUrl = os.path.join(path, dirName)
+    os.makedirs(saveUrl)
 
-def load_cameras_info(root):
-    cameras_info = {c for c in categories}
-    for category in categories:
-        cameras_info[category] = np.load(f'{root}{category}.npy')
-    return cameras_info
+    with open(os.path.join(saveUrl, '2CylinderEngine.gltf'), "wb") as f:
+        f.write(gltf)
+    with open(os.path.join(saveUrl, '2CylinderEngine.bin'), "wb") as f:
+        f.write(bin)
+    with open(os.path.join(saveUrl, 'thumbImg.jpg'), "wb") as f:
+        f.write(thumbImg)
 
-def load_into_numpy_array_and_resize(data, resolution):
-    image = Image.open(BytesIO(data))
-    w, h = image.size
-    s = min(w, h)
-    image = image.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2))
-    image = image.resize((resolution, resolution), Image.LANCZOS)
-    image = np.array(image, dtype=np.uint8)
-    return image
+    return dirName
 
+
+# WAS를 통해 Repository에 파일 저장
+URL = "http://localhost:8080"
+def save_file_into_repository(title: str, catCode: str, saveUrl: str, token: str):
+    memberNum = jwt.decode(token, options={"verify_signature": False})['num']
+    body = {
+        "title": title,
+        "catCode": catCode,
+        "imgUrl": saveUrl + '\\thumbImg.jpg',
+        "memberNum": memberNum,
+        "objectUrl": saveUrl
+    }
+    response = httpx.post(URL + '/items/new', json=body)
+    return response.json()
+
+# 메인 페이지 접속
 @app.get("/")
 async def root():
     return {"Welcome"}
 
-@app.post("/convert/")
-async def convert(file: UploadFile = File(...), category : str = Form(...)):
-    ''' in style_gan.py '''
-    image = load_into_numpy_array_and_resize(await file.read(),style_gan_model.img_resolution)
+# 3D Conversion 수행
+@app.post("/convert")
+async def convert(file: UploadFile = File(...), catCode: str = Form(...), X_AUTH_TOKEN: str = Header()):
+    # 카테고리가 유효한지 확인
+    if catCode not in categories:
+        return {"message": "category not found"}
 
-    # image를 넣어 mesh, texture 생성
-    attributes = predictor_model(torch.Tensor(image.transpose(2, 0, 1)).unsqueeze(0))
+    title = file.filename
+    if len(title) > 45:
+        title = title[0:45]
 
-    mesh = attributes['vertices']
-    texture = attributes['textures']
-    #lights = attributes['lights']
+    # 3D conversion 수행
+    bin_file = open("data\\2CylinderEngine.bin", 'rb').read()
+    obj_file = open("data\\2CylinderEngine.gltf", 'rb').read()
+    thumbImg_file = await file.read()
 
-    # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
-    mv_images = style_gan.get_multiview_images(style_gan_model, torch.Tensor(cameras_info[category]), mesh, texture)
+    # 변환된 파일 저장
+    saveUrl = save_file_into_storage(title, catCode, obj_file, bin_file, thumbImg_file)
 
-    # TODO: mask_rcnn을 사용할 지, IS_NET을 사용할 지 결정
-    ''' in mask.py '''
-    # 이미지들의 sementic mask 얻기
-    mv_masks = mask.detect_mask(mask_rcnn_model,[mv_images])
+    # WAS로 saveUrl 전달
+    response = save_file_into_repository(title, catCode, saveUrl, X_AUTH_TOKEN)
 
-    ''' in dibr.py '''
-    # 3D Object 생성
-    bin_path, obj_path, thumb_nail_img = diffRender.create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
-    
-    # 3D Object를 저장소에 저장
-    save_file_into_store(bin_path)
-    save_file_into_store(obj_path)
+    # 변환 및 저장 완료 결과 반환
+    return response
 
-    return {"file_name": file.filename, "category" : category}
+
+@app.get("/test")
+async def test():
+    response = httpx.get(URL + '/items')
+    return response.json()
