@@ -386,7 +386,7 @@ class DiffRender(object):
 
         image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
 
-        cv2.imwrite(f"{save_path}thumbnail.png", image[0].cpu().detach().numpy())
+        cv2.imwrite(f"{save_path}/thumbnail.png", image[0].cpu().detach().numpy())
 
         return
 
@@ -475,7 +475,7 @@ class DiffRender(object):
 
         stage.Save()
 
-        save_file_path = f"{save_path}{category}.gltf"
+        save_file_path = f"{save_path}/{category}.gltf"
         # bin_path = f"{save_path}buffer.bin"
 
         scn = a3d.Scene()
