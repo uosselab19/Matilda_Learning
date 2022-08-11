@@ -16,5 +16,9 @@ else
     fi
 fi
 
+origin="/home/ec2-user/Matilda_Learning"
+cp -r ${origin}/predictor/PerceptualSimilarity ./predictor
+cp ${origin}/predictor/network/TOP.pth ./predictor/network
+
 echo 'Process start'
 nohup uvicorn main:app --reload --host 0.0.0.0 >> nohup.out 2>&1 &
