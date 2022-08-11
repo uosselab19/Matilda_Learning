@@ -137,7 +137,7 @@ class DiffRender(object):
         vertices_init = vertices * 2.0 - 1.0  # (1, V, 3)
 
         # get face_uvs
-        faces = mesh.faces
+        faces = mesh.faces.cuda()
         uvs = mesh.uvs.cuda().unsqueeze(0)
         face_uvs_idx = mesh.face_uvs_idx.cuda()
         face_uvs = kal.ops.mesh.index_vertices_by_faces(uvs, face_uvs_idx).detach()
@@ -222,10 +222,6 @@ class DiffRender(object):
         # This is the center of the optimized mesh, separating it as a learnable parameter helps the optimization.
         self.vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
                                     requires_grad=True)
-
-        nb_faces = self.num_faces
-        nb_vertices = self.num_vertices
-        face_size = 3
 
         camera_pos = camera_info[0].cuda()
         object_pos = camera_info[1].cuda()
@@ -353,8 +349,8 @@ class DiffRender(object):
         save_path = f'./save/{category}/'
 
         # vertices, textures 저장
-        self.vertices = vertices
-        self.textures = textures
+        self.vertices = vertices.cuda()
+        self.textures = textures.cuda()
 
         # save object
         obj_dir_path = self.export_into_gltf(save_path, category)
