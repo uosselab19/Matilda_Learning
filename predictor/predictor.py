@@ -35,6 +35,8 @@ def get_predictor_model(template_path, resume_path, image_size):
     netE.load_state_dict(checkpoint['netE'])
     print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
 
+    netE.eval()
+
     return netE, diffRender
 
 class Timer:

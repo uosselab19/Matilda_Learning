@@ -91,7 +91,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
-    attributes = predictor(torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).repeat(2,1,1,1).cuda())
+    attributes = predictor(torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).cuda())
 
     mesh = attributes['vertices'][0]
     texture = attributes['textures'][0]
@@ -111,7 +111,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     # obj_dir_path, thumb_nail_img = dib_r.create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
 
     # For Test
-    cam_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
+    cam_pos = torch.tensor([[0., 0., 10.]], dtype=torch.float).cuda()
     obj_dir_path, thumb_nail_img = dib_r.create_3d_object_not_train(mesh, texture, cam_pos, category)
 
     cv2.imwrite(f"{category}_thumbnail.png", thumb_nail_img[0].cpu().detach().numpy())
