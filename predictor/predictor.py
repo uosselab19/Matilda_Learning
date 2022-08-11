@@ -354,7 +354,7 @@ class DiffRender(object):
         # save thumbnail img
         self.save_thumbnail(save_path, cameras_pos)
 
-        return save_path
+        return
 
     def save_thumbnail(self, save_path, camera_pos):
         # This is similar to a training iteration (without the loss part)

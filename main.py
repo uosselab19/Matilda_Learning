@@ -1,5 +1,5 @@
 import sys
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile, Header
 from PIL import Image
 from PIL import ImageOps
 from io import BytesIO
@@ -7,6 +7,11 @@ import numpy as np
 import time
 import torch
 import torchvision
+import os
+import httpx
+import jwt
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 sys.path.append('./mask')
 sys.path.append('./style_gan')
@@ -21,10 +26,41 @@ from predictor import predictor
 # start : uvicorn main:app --reload --host 0.0.0.0
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",
+    "http://3.133.233.81:3000"
+    "https://localhost:3000",
+    "https://3.133.233.81:3000"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Image Storage 위치 지정 및 디렉토리 확인
+PATH = os.environ.get("ImageStorage") + '\\items'
+
+if not os.path.exists(PATH):
+    print("지정된 Image Storage 경로를 찾지 못했습니다.")
+    print("프로그램을 종료합니다.")
+    exit()
+
+categories = ['TOP']
+# categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
+for cate in categories:
+    if not os.path.exists(os.path.join(PATH, cate)):
+        print("지정된 Image Storage에서 다음 카테고리에 해당하는 디렉토리를 찾지 못했습니다.: " + cate)
+        print("프로그램을 종료합니다.")
+        exit()
+
+
 # categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
-categories = ['shirts'] # for test
 #samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
-samples_per_categories = {'shirts' : 'sphere'}
+samples_per_categories = {'TOP' : 'sphere'}
 
 def get_all_models():
     image_size = 512
@@ -63,9 +99,6 @@ predictor_models, diffRenderers = get_all_models()
 # 카메라 정보 불러오기
 #cameras_info = load_cameras_info('./predictor/samples/')
 
-def save_file_into_store(path):
-    return
-
 def load_into_tensor_and_resize(data, resolution):
     img = Image.open(BytesIO(data)).convert('RGB')
     W, H = img.size
@@ -79,12 +112,52 @@ def load_into_tensor_and_resize(data, resolution):
     img = torchvision.transforms.functional.to_tensor(img).cuda()
     return img
 
+
+# # Image Storage에 gltf, bin, thumbImg를 저장
+# def save_file_into_storage(title: str, catCode: str, gltf: bytes, bin: bytes, thumbImg: bytes):
+#     dirName = catCode + '\\' + str(int(datetime.now().timestamp())) + '_' + title
+#     saveUrl = os.path.join(PATH, dirName)
+#     os.makedirs(saveUrl)
+
+#     with open(os.path.join(saveUrl, '2CylinderEngine.gltf'), "wb") as f:
+#         f.write(gltf)
+#     with open(os.path.join(saveUrl, '2CylinderEngine.bin'), "wb") as f:
+#         f.write(bin)
+#     with open(os.path.join(saveUrl, 'thumbImg.jpg'), "wb") as f:
+#         f.write(thumbImg)
+
+#     return dirName
+
+
+# WAS를 통해 Repository에 파일 저장
+URL = "http://3.133.233.81:8080"
+def save_file_into_repository(title: str, catCode: str, saveUrl: str, token: str):
+    memberNum = jwt.decode(token, options={"verify_signature": False})['num']
+    body = {
+        "title": title,
+        "catCode": catCode,
+        "imgUrl": saveUrl + '\\thumbImg.jpg',
+        "memberNum": memberNum,
+        "objectUrl": saveUrl
+    }
+    response = httpx.post(URL + '/items/new', json=body)
+    return response.json()
+
 @app.get("/")
 async def root():
     return {"Welcome"}
 
 @app.post("/convert")
-async def convert(file: UploadFile = File(...), category : str = Form(...)):
+async def convert(file: UploadFile = File(...), category : str = Form(...), X_AUTH_TOKEN: str = Header()):
+    # 카테고리가 유효한지 확인
+    if category not in categories:
+        return {"message": "category not found"}
+    
+    # 파일 이름 추출
+    title = file.filename
+    if len(title) > 45:
+        title = title[0:45]
+    
     image = load_into_tensor_and_resize(await file.read(),512)
 
     predictor = predictor_models[category]
@@ -113,11 +186,15 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     # For Test
     cam_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
-    save_path = f'./save/{category}/{time.time()}/'
-    obj_dir_path = dib_r.save_object(mesh, texture, cam_pos, category, save_path)
 
-    # # 3D Object를 저장소에 저장
-    # save_file_into_store(bin_path)
-    # save_file_into_store(obj_path)
+    # 파일 저장되는 위치
+    # save_path = f'./save/{category}/{time.time()}/'
+    dirName = category + '\\' + str(int(datetime.now().timestamp())) + '_' + title
+    saveUrl = os.path.join(PATH, dirName)
 
-    return {"obj_dir_path" : obj_dir_path}
+    dib_r.save_object(mesh, texture, cam_pos, category, saveUrl)
+
+    # WAS로 saveUrl 전달
+    response = save_file_into_repository(title, category, saveUrl, X_AUTH_TOKEN)
+
+    return response
