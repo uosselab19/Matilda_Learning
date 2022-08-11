@@ -118,6 +118,7 @@ class DiffRender(object):
     scheduler_gamma = 0.5
 
     thumb_nail_id = 0
+    test_batch_size = 1
 
     def __init__(self, filename_obj, image_size):
         self.image_size = image_size
