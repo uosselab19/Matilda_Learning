@@ -328,7 +328,6 @@ class DiffRender(object):
         # path to the rendered image (using the data synthesizer)
 
         save_path = f'./save/{category}/'
-        mesh_scale = 3
 
         # dataloader 세팅
         self.set_dataloader(images, masks, cameras_info)
@@ -341,10 +340,10 @@ class DiffRender(object):
         self.train()
 
         # save object
-        bin_path, obj_file_path = self.export_into_gltf(save_path, self.vertices, self.textures, category)
+        bin_path, obj_file_path = self.export_into_gltf(save_path, category)
 
         # get thumbnail img
-        thumb_img = self.get_thumbnail(self.vertices, self.textures,cameras_info)
+        thumb_img = self.get_thumbnail(cameras_info)
 
         return bin_path, obj_file_path, thumb_img
 
