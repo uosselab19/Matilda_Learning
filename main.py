@@ -76,7 +76,7 @@ def load_into_tensor_and_resize(data, resolution):
     img = ImageOps.expand(img, padding)
     img = img.resize((resolution, resolution), Image.LANCZOS)
 
-    img = torchvision.transforms.functional.to_tensor(img).permute(2,0,1).cuda()
+    img = torchvision.transforms.functional.to_tensor(img).cuda()
     return img
 
 @app.get("/")
