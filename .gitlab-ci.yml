@@ -1,0 +1,9 @@
+stages:
+  - run
+
+run:
+  only:
+    - main
+  stage: run
+  script:
+    - sh ./shellscripts/run.sh
