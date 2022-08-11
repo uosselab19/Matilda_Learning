@@ -1,7 +1,7 @@
 # import torch related
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+#import torch.nn.functional as F
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -25,25 +25,40 @@ def deep_copy(att, index=None, detach=False):
                 copy_att[key] = value[index].clone()
     return copy_att
 
-#####################################################################
-# --------------------- 3D Properties Encoder --------------------- #
-#####################################################################
+
+def convblock(indim, outdim, ker, stride, pad):
+    block2 = [
+        nn.Conv2d(indim, outdim, ker, stride, pad),
+        nn.BatchNorm2d(outdim),
+        nn.ReLU()
+    ]
+    return block2
+
+
+def linearblock(indim, outdim):
+    block2 = [
+        nn.Linear(indim, outdim),
+        # nn.BatchNorm1d(outdim),
+        nn.ReLU()
+    ]
+    return block2
+
 
 class ShapeEncoder(nn.Module):
     def __init__(self, nc, nk, num_vertices):
         super(ShapeEncoder, self).__init__()
         self.num_vertices = num_vertices
 
-        block1 = self.convblock(nc, 32, nk, stride=2, pad=2)
-        block2 = self.convblock(32, 64, nk, stride=2, pad=2)
-        block3 = self.convblock(64, 128, nk, stride=2, pad=2)
-        block4 = self.convblock(128, 256, nk, stride=2, pad=2)
-        block5 = self.convblock(256, 512, nk, stride=2, pad=2)
+        block1 = convblock(nc, 32, nk, stride=2, pad=2)
+        block2 = convblock(32, 64, nk, stride=2, pad=2)
+        block3 = convblock(64, 128, nk, stride=2, pad=2)
+        block4 = convblock(128, 256, nk, stride=2, pad=2)
+        block5 = convblock(256, 512, nk, stride=2, pad=2)
 
         avgpool = [nn.AdaptiveAvgPool2d(1)]
 
-        linear1 = self.linearblock(512, 1024)
-        linear2 = self.linearblock(1024, 1024)
+        linear1 = linearblock(512, 1024)
+        linear2 = linearblock(1024, 1024)
         self.linear3 = nn.Linear(1024, self.num_vertices * 3)
 
         #################################################
@@ -63,22 +78,6 @@ class ShapeEncoder(nn.Module):
 
         # Free some memory
         del all_blocks, block1, block2, block3, linear1, linear2
-
-    def convblock(self, indim, outdim, ker, stride, pad):
-        block2 = [
-            nn.Conv2d(indim, outdim, ker, stride, pad),
-            nn.BatchNorm2d(outdim),
-            nn.ReLU()
-        ]
-        return block2
-
-    def linearblock(self, indim, outdim):
-        block2 = [
-            nn.Linear(indim, outdim),
-            nn.BatchNorm1d(outdim),
-            nn.ReLU()
-        ]
-        return block2
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -101,16 +100,16 @@ class LightEncoder(nn.Module):
     def __init__(self, nc, nk):
         super(LightEncoder, self).__init__()
 
-        block1 = self.convblock(nc, 32, nk, stride=2, pad=2)
-        block2 = self.convblock(32, 64, nk, stride=2, pad=2)
-        block3 = self.convblock(64, 128, nk, stride=2, pad=2)
-        block4 = self.convblock(128, 256, nk, stride=2, pad=2)
-        block5 = self.convblock(256, 512, nk, stride=2, pad=2)
+        block1 = convblock(nc, 32, nk, stride=2, pad=2)
+        block2 = convblock(32, 64, nk, stride=2, pad=2)
+        block3 = convblock(64, 128, nk, stride=2, pad=2)
+        block4 = convblock(128, 256, nk, stride=2, pad=2)
+        block5 = convblock(256, 512, nk, stride=2, pad=2)
 
         avgpool = [nn.AdaptiveAvgPool2d(1)]
 
-        linear1 = self.linearblock(512, 1024)
-        linear2 = self.linearblock(1024, 1024)
+        linear1 = linearblock(512, 1024)
+        linear2 = linearblock(1024, 1024)
         self.linear3 = nn.Linear(1024, 9)
 
         #################################################
@@ -130,22 +129,6 @@ class LightEncoder(nn.Module):
 
         # Free some memory
         del all_blocks, block1, block2, block3, linear1, linear2
-
-    def convblock(self, indim, outdim, ker, stride, pad):
-        block2 = [
-            nn.Conv2d(indim, outdim, ker, stride, pad),
-            nn.BatchNorm2d(outdim),
-            nn.ReLU()
-        ]
-        return block2
-
-    def linearblock(self, indim, outdim):
-        block2 = [
-            nn.Linear(indim, outdim),
-            nn.BatchNorm1d(outdim),
-            nn.ReLU()
-        ]
-        return block2
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -171,16 +154,16 @@ class TextureEncoder(nn.Module):
         super(TextureEncoder, self).__init__()
         self.num_vertices = num_vertices
 
-        block1 = self.convblock(nc, nf // 2, nk, stride=2, pad=2)
-        block2 = self.convblock(nf // 2, nf, nk, stride=2, pad=2)
-        block3 = self.convblock(nf, nf * 2, nk, stride=2, pad=2)
-        block4 = self.convblock(nf * 2, nf * 4, nk, stride=2, pad=2)
-        block5 = self.convblock(nf * 4, nf * 8, nk, stride=2, pad=2)
+        block1 = convblock(nc, nf // 2, nk, stride=2, pad=2)
+        block2 = convblock(nf // 2, nf, nk, stride=2, pad=2)
+        block3 = convblock(nf, nf * 2, nk, stride=2, pad=2)
+        block4 = convblock(nf * 2, nf * 4, nk, stride=2, pad=2)
+        block5 = convblock(nf * 4, nf * 8, nk, stride=2, pad=2)
 
         avgpool = [nn.AdaptiveAvgPool2d(1)]
 
-        linear1 = self.convblock(nf * 8, nf * 16, 1, stride=1, pad=0)
-        linear2 = self.convblock(nf * 16, nf * 8, 1, stride=1, pad=0)
+        linear1 = convblock(nf * 8, nf * 16, 1, stride=1, pad=0)
+        linear2 = convblock(nf * 16, nf * 8, 1, stride=1, pad=0)
 
         #################################################
         all_blocks = block1 + block2 + block3 + block4 + block5 + avgpool
@@ -238,31 +221,16 @@ class TextureEncoder(nn.Module):
             nn.Tanh()
         )
 
-    def convblock(self, indim, outdim, ker, stride, pad):
-        block2 = [
-            nn.Conv2d(indim, outdim, ker, stride, pad),
-            nn.BatchNorm2d(outdim),
-            nn.ReLU()
-        ]
-        return block2
-
-    def linearblock(self, indim, outdim):
-        block2 = [
-            nn.Linear(indim, outdim),
-            nn.BatchNorm1d(outdim),
-            nn.ReLU()
-        ]
-        return block2
-
     def forward(self, x):
         img = x[:, :3]
         batch_size = x.shape[0]
         x = self.encoder1(x)
         x = x.view(batch_size, -1, 1, 1)
         x = self.encoder2(x)
-        textures = (self.texture_flow(x) + 1) / 2 # (batch_size, 3, 256, 256)
+        textures = (self.texture_flow(x) + 1) / 2  # (batch_size, 3, 256, 256)
 
         return textures
+
 
 class AttributeEncoder(nn.Module):
     def __init__(self, num_vertices, vertices_init, nc, nf, nk):
