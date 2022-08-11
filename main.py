@@ -6,6 +6,7 @@ from io import BytesIO
 import numpy as np
 import cv2
 import torch
+import torchvision
 
 sys.path.append('./mask')
 sys.path.append('./style_gan')
@@ -65,8 +66,8 @@ predictor_models, diffRenderers = get_all_models()
 def save_file_into_store(path):
     return
 
-def load_into_numpy_array_and_resize(data, resolution):
-    img = Image.open(BytesIO(data))
+def load_into_tensor_and_resize(data, resolution):
+    img = Image.open(BytesIO(data)).convert('RGB')
     W, H = img.size
     desired_size = max(W, H)
     delta_w = desired_size - W
@@ -75,7 +76,7 @@ def load_into_numpy_array_and_resize(data, resolution):
     img = ImageOps.expand(img, padding)
     img = img.resize((resolution, resolution), Image.LANCZOS)
 
-    img = np.array(img, dtype=np.uint8) / 255
+    img = torchvision.transforms.functional.to_tensor(img).transpose(2,0,1).cuda()
     return img
 
 @app.get("/")
@@ -84,15 +85,14 @@ async def root():
 
 @app.post("/convert")
 async def convert(file: UploadFile = File(...), category : str = Form(...)):
-    image = load_into_numpy_array_and_resize(await file.read(),512)
+    image = load_into_tensor_and_resize(await file.read(),512)
 
     predictor = predictor_models[category]
     dib_r = diffRenderers[samples_per_categories[category]]
 
-    predictor.eval()
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
-    attributes = predictor(torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).cuda())
+    attributes = predictor(image.unsqueeze(0))
 
     mesh = attributes['vertices']
     texture = attributes['textures']
