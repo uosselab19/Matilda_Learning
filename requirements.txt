@@ -14,3 +14,6 @@ usd-core==22.3
 aspose-3d
 opencv-python
 python-multipart
+jwt
+PyJWT
+httpx

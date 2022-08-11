@@ -128,7 +128,6 @@ def load_into_tensor_and_resize(data, resolution):
 
 #     return dirName
 
-
 # WAS를 통해 Repository에 파일 저장
 URL = "http://3.133.233.81:8080"
 def save_file_into_repository(title: str, catCode: str, saveUrl: str, token: str):
