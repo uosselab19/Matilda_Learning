@@ -91,10 +91,10 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     ''' in predictor.py '''
     # image를 넣어 mesh, texture 생성
-    attributes = predictor(torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).cuda())
+    attributes = predictor(torch.Tensor(image.transpose(2,0,1)).unsqueeze(0).repeat(2,1,1,1).cuda())
 
-    mesh = attributes['vertices']
-    texture = attributes['textures']
+    mesh = attributes['vertices'][0]
+    texture = attributes['textures'][0]
     #lights = attributes['lights']
 
     # ''' in style_gan.py '''

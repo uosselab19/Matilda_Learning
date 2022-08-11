@@ -35,7 +35,7 @@ def get_predictor_model(template_path, resume_path, image_size):
     netE.load_state_dict(checkpoint['netE'])
     print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
 
-    return netE.eval(), diffRender
+    return netE, diffRender
 
 class Timer:
     def __init__(self, msg):
@@ -232,9 +232,6 @@ class DiffRender(object):
         object_pos.requires_grad = True
         camera_up.requires_grad = True
 
-        # Set up auxiliary laplacian matrix for the laplacian loss
-        vertices_laplacian_matrix = self.vertices_laplacian_matrix
-
         # Set optimizer and scheduler
         vertices_optim = torch.optim.Adam(params=[self.vertices, self.vertice_shift],
                                           lr=self.vertice_lr)
@@ -267,15 +264,15 @@ class DiffRender(object):
 
                 cam_transform = generate_transformation_matrix(camera_pos[data['view_num']], object_pos[data['view_num']], camera_up[data['view_num']])
 
-                pred_imgs, pred_masks, attributes = self.render(self.vertices, self.texture_map, cam_transform)
+                pred_imgs, pred_masks = self.render(self.vertices, self.texture_map, cam_transform)
 
                 ### Compute Losses ###
                 # img, mask loss
                 loss = self.calc_img_loss(pred_imgs, pred_masks, gt_imgs, gt_masks.squeeze(1))
 
                 # mesh regularization
-                loss_lap = self.calc_lap_loss(attributes)
-                loss_mov = self.calc_mov_loss(attributes) / 3.
+                loss_lap = self.calc_lap_loss()
+                loss_mov = self.calc_mov_loss() / 3.
 
                 total_loss = loss + loss_lap + loss_mov
                 ### Update the mesh ###
@@ -299,17 +296,17 @@ class DiffRender(object):
         loss_data = self.image_weight * loss_image + self.mask_weight * loss_mask + self.perceptual_wight * loss_perceptual
         return loss_data
 
-    def calc_mov_loss(self, att):
-        Na = att['delta_vertices']
+    def calc_mov_loss(self):
+        Na = self.vertices - self.vertices_init
         Nf = Na.index_select(1, self.flip_index.to(Na.device))
         Nf[..., 2] *= -1
 
         loss_norm = (Na - Nf).norm(dim=2).mean()
         return self.mov_weight * loss_norm
 
-    def calc_lap_loss(self, att):
+    def calc_lap_loss(self):
         # laplacian loss
-        delta_vertices = att['delta_vertices']
+        delta_vertices = self.vertices - self.vertices_init
         device = delta_vertices.device
         nb_vertices = delta_vertices.shape[1]
 
@@ -350,8 +347,8 @@ class DiffRender(object):
         save_path = f'./save/{category}/'
 
         # vertices, textures 저장
-        self.vertices = vertices.cuda()
-        self.textures = textures.cuda()
+        self.vertices = vertices
+        self.textures = textures
 
         # save object
         obj_dir_path = self.export_into_gltf(save_path, category)
@@ -388,7 +385,7 @@ class DiffRender(object):
         image = kal.render.mesh.texture_mapping(texture_coords,
                                                 self.textures.repeat(self.test_batch_size, 1, 1, 1),
                                                 mode='bilinear')
-        image = torch.clamp(image * mask + torch.ones_like(image) * (1 - mask), 0., 1.)
+        image = torch.clamp(image * mask, 0., 1.) # torch.ones_like(image) * (1 - mask)
 
         return image
 
