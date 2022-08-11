@@ -377,7 +377,7 @@ class DiffRender(object):
 
         face_attributes = [
             self.face_uvs.repeat(self.test_batch_size, 1, 1, 1),
-            torch.ones((self.test_batch_size, self.nb_faces, 3, 1), device='cuda'),
+            torch.ones((self.test_batch_size, self.num_faces, 3, 1), device='cuda'),
         ]
 
         image_features, soft_mask, face_idx = kal.render.mesh.dibr_rasterization(
