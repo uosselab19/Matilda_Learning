@@ -1,6 +1,9 @@
 stages:
   - run
 
+cache:
+  untracked: true
+
 run:
   only:
     - main
