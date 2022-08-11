@@ -42,7 +42,7 @@ app.add_middleware(
 )
 
 # Image Storage 위치 지정 및 디렉토리 확인
-PATH = os.environ.get("ImageStorage") + '\\items'
+PATH = os.environ.get("ImageStorage") + '/items'
 
 if not os.path.exists(PATH):
     print("지정된 Image Storage 경로를 찾지 못했습니다.")
@@ -136,7 +136,7 @@ def save_file_into_repository(title: str, catCode: str, saveUrl: str, token: str
     body = {
         "title": title,
         "catCode": catCode,
-        "imgUrl": saveUrl + '\\thumbImg.jpg',
+        "imgUrl": saveUrl + '/thumbImg.jpg',
         "memberNum": memberNum,
         "objectUrl": saveUrl
     }
@@ -189,12 +189,12 @@ async def convert(file: UploadFile = File(...), category : str = Form(...), X_AU
 
     # 파일 저장되는 위치
     # save_path = f'./save/{category}/{time.time()}/'
-    dirName = category + '\\' + str(int(datetime.now().timestamp())) + '_' + title
+    dirName = category + '/' + str(int(datetime.now().timestamp())) + '_' + title
     saveUrl = os.path.join(PATH, dirName)
 
     dib_r.save_object(mesh, texture, cam_pos, category, saveUrl)
 
     # WAS로 saveUrl 전달
-    response = save_file_into_repository(title, category, saveUrl, X_AUTH_TOKEN)
+    response = save_file_into_repository(title, category, os.path.join('items', dirName), X_AUTH_TOKEN)
 
     return response
