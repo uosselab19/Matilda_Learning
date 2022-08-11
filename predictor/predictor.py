@@ -386,7 +386,7 @@ class DiffRender(object):
 
         texture_coords, mask = image_features
         image = kal.render.mesh.texture_mapping(texture_coords,
-                                                self.texture.repeat(self.test_batch_size, 1, 1, 1),
+                                                self.textures.repeat(self.test_batch_size, 1, 1, 1),
                                                 mode='bilinear')
         image = torch.clamp(image * mask + torch.ones_like(image) * (1 - mask), 0., 1.)
 
