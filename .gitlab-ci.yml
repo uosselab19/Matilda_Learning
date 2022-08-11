@@ -1,0 +1,12 @@
+stages:
+  - run
+
+cache:
+  untracked: true
+
+run:
+  only:
+    - main
+  stage: run
+  script:
+    - sh ./shellscripts/run.sh
