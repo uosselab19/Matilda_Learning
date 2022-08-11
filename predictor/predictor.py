@@ -9,6 +9,7 @@ from kaolin.render.mesh import dibr_rasterization, texture_mapping, \
 import os
 import torch
 import time
+import cv2
 
 import aspose.threed as a3d
 from PIL import Image
@@ -334,32 +335,28 @@ class DiffRender(object):
         # train
         self.train()
 
-        # save object
-        bin_path, obj_file_path = self.export_into_gltf(save_path, category)
+        self.save_object(self.vertices, self.textures, cameras_info, category, save_path)
 
-        # get thumbnail img
-        thumb_img = self.get_thumbnail(cameras_info)
+        return save_path
 
-        return bin_path, obj_file_path, thumb_img
-
-    def create_3d_object_not_train(self, vertices, textures, cameras_pos, category):
+    def save_object(self, vertices, textures, cameras_pos, category, save_path):
         # path to the rendered image (using the data synthesizer)
-
-        save_path = f'./save/{category}/'
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
 
         # vertices, textures 저장
         self.vertices = vertices
         self.textures = textures
 
         # save object
-        obj_dir_path = self.export_into_gltf(save_path, category)
+        self.export_into_gltf(save_path, category)
 
-        # get thumbnail img
-        thumb_img = self.get_thumbnail(cameras_pos)
+        # save thumbnail img
+        self.save_thumbnail(save_path, cameras_pos)
 
-        return obj_dir_path, thumb_img
+        return save_path
 
-    def get_thumbnail(self, camera_pos):
+    def save_thumbnail(self, save_path, camera_pos):
         # This is similar to a training iteration (without the loss part)
         object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float).cuda()
         camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float).cuda()
@@ -386,15 +383,18 @@ class DiffRender(object):
         image = kal.render.mesh.texture_mapping(texture_coords,
                                                 self.textures.repeat(self.test_batch_size, 1, 1, 1),
                                                 mode='bilinear')
-        image = torch.clamp(image * mask, 0., 1.) # torch.ones_like(image) * (1 - mask)
 
-        return image
+        image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
+
+        cv2.imwrite(f"{save_path}thumbnail.png", image[0].cpu().detach().numpy())
+
+        return
 
     def export_into_gltf(self, save_path, category):
         time = Usd.TimeCode.Default()
 
         # 저장할 object name setting
-        mesh_name = f'mesh_{category}_{time}'
+        mesh_name = f'mesh_{category}'
         ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
 
         # save texture
@@ -475,11 +475,11 @@ class DiffRender(object):
 
         stage.Save()
 
-        save_file_path = f"{save_path}{category}_{time}.gltf"
+        save_file_path = f"{save_path}{category}.gltf"
         # bin_path = f"{save_path}buffer.bin"
 
         scn = a3d.Scene()
         scn.open(ind_out_path)
         scn.save(save_file_path, a3d.FileFormat.GLTF2)
 
-        return save_path
+        return

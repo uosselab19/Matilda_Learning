@@ -4,7 +4,7 @@ from PIL import Image
 from PIL import ImageOps
 from io import BytesIO
 import numpy as np
-import cv2
+import time
 import torch
 import torchvision
 
@@ -113,12 +113,11 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
 
     # For Test
     cam_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
-    obj_dir_path, thumb_nail_img = dib_r.create_3d_object_not_train(mesh, texture, cam_pos, category)
-
-    cv2.imwrite(f"{category}_thumbnail.png", thumb_nail_img[0].cpu().detach().numpy())
+    save_path = f'./save/{category}/{time.time()}/'
+    obj_dir_path = dib_r.save_object(mesh, texture, cam_pos, category, save_path)
 
     # # 3D Object를 저장소에 저장
     # save_file_into_store(bin_path)
     # save_file_into_store(obj_path)
 
-    return {"thumb_nail_img": thumb_nail_img.shape, "obj_file_path" : obj_dir_path}
+    return {"obj_dir_path" : obj_dir_path}
