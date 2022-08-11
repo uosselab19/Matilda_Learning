@@ -111,7 +111,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...)):
     # obj_dir_path, thumb_nail_img = dib_r.create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
 
     # For Test
-    cam_pos = object_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
+    cam_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
     obj_dir_path, thumb_nail_img = dib_r.create_3d_object_not_train(mesh, texture, cam_pos, category)
 
     cv2.imwrite(f"{category}_thumbnail.png", thumb_nail_img[0].permute(1,2,0).cpu().detach().numpy())
