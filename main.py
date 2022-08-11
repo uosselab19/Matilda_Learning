@@ -13,7 +13,7 @@ import jwt
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
-from style_gan import style_gan
+#from style_gan import style_gan
 #from mask import mask
 from predictor import predictor
 
