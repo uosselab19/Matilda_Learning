@@ -108,7 +108,7 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
 
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
 
-    vutils.save_image(img.detach(), f"./thumbnail.png", normalize=True)
+    vutils.save_image(img.detach(), f"/home/ec2-user/Matilda_Learning/thumbnail.png", normalize=True)
 
     return img
 
