@@ -367,7 +367,7 @@ class DiffRender(object):
 
         image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
 
-        vutils.save(image.detach(), f"{save_path}/thumbnail.png", normalize=True)
+        vutils.save_image(image.detach(), f"{save_path}/thumbnail.png", normalize=True)
 
         return
 
