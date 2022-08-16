@@ -19,7 +19,7 @@ from datetime import datetime
 from mask import mask
 from predictor import predictor
 
-# start : uvicorn main:app --reload --host 0.0.0.0
+# start : uvicorn main:app --reload --host 0.0.0.0 --port 8100 &
 app = FastAPI()
 
 origins = [

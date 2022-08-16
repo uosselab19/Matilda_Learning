@@ -11,6 +11,7 @@ def get_mask_model(model_path):
     else:
         print('can not load pretrained_network')
         exit(0)
+    net = net.cuda()
     net.eval()
     return net
 
