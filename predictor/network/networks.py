@@ -207,7 +207,7 @@ class TextureEncoder(nn.Module):
         )
 
     def forward(self, x):
-        img = x[:, :3]
+        x = x[:, :3]
         x = self.encoder1(x)
         x = self.encoder2(x)
         textures = (self.texture_flow(x) + 1) / 2 # (batch_size, 3, 256, 256)
@@ -226,7 +226,6 @@ class AttributeEncoder(nn.Module):
 
     def forward(self, x):
         device = x.device
-        batch_size = x.shape[0]
         input_img = x
 
         # vertex
