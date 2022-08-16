@@ -78,7 +78,7 @@ def get_all_models():
             diffRenderers[samples_per_categories[category]] = diffRenderer
 
     # mask 모델 불러오기
-    model_path = "../saved_models/IS-Net/isnet.pth"  ## load trained weights from this path
+    model_path = "./mask/DIS/saved_models/IS-Net/isnet.pth"  ## load trained weights from this path
     #mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
     mask_model = mask.get_mask_model(model_path)
 
