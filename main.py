@@ -7,6 +7,7 @@ import numpy as np
 import time
 import torch
 import torchvision
+import torchvision.utils as vutils
 import torchvision.transforms as transforms
 import os
 import httpx
@@ -106,6 +107,8 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
     img_mask = torch.where(img_mask > 0.6, 1., 0.)
 
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
+
+    vutils.save_image(img.detach(), f"./thumbnail.png", normalize=True)
 
     return img
 
