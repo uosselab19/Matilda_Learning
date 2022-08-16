@@ -1,68 +1,33 @@
-import os
-import sys
-import numpy as np
-import skimage
+import torch
+import torch.nn.functional as F
 
-# Root directory of the project
-ROOT_DIR = os.path.abspath("./")
+from mask.DIS.models import isnet
 
-# Import Mask RCNN
-sys.path.append(ROOT_DIR)  # To find local version of the library
+def get_mask_model(model_path):
+    print(f"restore model from: {model_path}")
+    net = isnet.ISNetDIS()
+    if torch.cuda.is_available():
+        net.load_state_dict(torch.load(model_path))
+    else:
+        print('can not load pretrained_network')
+        exit(0)
+    net.eval()
+    return net
 
-from mrcnn.config import Config
-from mrcnn import visualize
-from mrcnn import model as modellib
+def get_mask_from_image(net, image):
+    # image should be (1, 3, 512, 512)
+    print("Making Mask...")
+    ds_val = net(image)[0]
 
-# Matilda Class names
-# Index of the class in the list is its ID. For example, to get ID of
-class_names = ['BG', 'ring', 'shirts', 'pants', 'hat', 'shoes']
-outdir = './mask/test_imgs'
+    pred_val = ds_val[0][0, :, :, :]  # B x 1 x H x W
 
-############################################################
-#  Configurations
-############################################################
+    ## recover the prediction spatial size to the orignal image size
+    pred_val = torch.squeeze(
+        F.upsample(torch.unsqueeze(pred_val, 0), (512, 512), mode='bilinear'))
 
-class MatildaConfig(Config):
-    NUM_CLASSES = 1 + 5  # Background + [ring, shirts, pants, hat, shoes]
-    NAME = "matilda"
+    # pred_val = normPRED(pred_val)
+    ma = torch.max(pred_val)
+    mi = torch.min(pred_val)
+    pred_val = (pred_val - mi) / (ma - mi)  # max = 1
 
-    GPU_COUNT = 1
-    IMAGES_PER_GPU = 1
-
-############################################################
-#  Functions
-############################################################
-
-def detect_mask(model, images):
-    masks = []
-    for i, image in enumerate(images):
-        if (image.shape[2] != 3):
-            image = image[:, :, 0:3]
-        # Run detection
-        results = model.detect([image], verbose=1)
-        # Save results
-        r = results[0]
-        mask = r['masks'][:, :, 0]
-
-        ## test masked_image
-        colors = visualize.random_colors(len(class_names))
-        masked_image = image.astype(np.uint32).copy()
-        masked_image = visualize.apply_mask(masked_image, mask, colors[0])
-
-        mask = np.expand_dims(mask, axis=2)
-
-        # Save output
-        file_name = f"{outdir}/{i}_rgb.png"
-        skimage.io.imsave(file_name, masked_image.astype(np.uint8))
-
-        masks.append(mask)
-
-    return masks
-
-def get_mask_model(weights_path):
-    config = MatildaConfig()
-    config.display()
-    model = modellib.MaskRCNN(config=config)
-    model.load_weights(weights_path, by_name=True)
-    return model
-
+    return pred_val

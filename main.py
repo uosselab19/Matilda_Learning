@@ -7,6 +7,8 @@ import numpy as np
 import time
 import torch
 import torchvision
+import torchvision.utils as vutils
+import torchvision.transforms as transforms
 import os
 import httpx
 import jwt
@@ -14,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
 #from style_gan import style_gan
-#from mask import mask
+from mask import mask
 from predictor import predictor
 
 # start : uvicorn main:app --reload --host 0.0.0.0
@@ -51,7 +53,6 @@ for cate in categories:
         print("프로그램을 종료합니다.")
         exit()
 
-
 # categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
 #samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
 samples_per_categories = {'TOP' : 'sphere'}
@@ -77,10 +78,11 @@ def get_all_models():
             diffRenderers[samples_per_categories[category]] = diffRenderer
 
     # mask 모델 불러오기
+    model_path = "../saved_models/IS-Net/isnet.pth"  ## load trained weights from this path
     #mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
-    #mask_model = mask.get_mask_model(mask_weights_path)
+    mask_model = mask.get_mask_model(model_path)
 
-    return predictor_models, diffRenderers
+    return predictor_models, mask_model, diffRenderers
 
 def load_cameras_info(root):
     cameras_info = {}
@@ -88,24 +90,25 @@ def load_cameras_info(root):
         cameras_info[category] = np.load(f'{root}{category}.npy')
     return cameras_info
 
-predictor_models, diffRenderers = get_all_models()
+predictor_models, mask_model, diffRenderers = get_all_models()
 
 # 카메라 정보 불러오기
 #cameras_info = load_cameras_info('./predictor/samples/')
 
-def load_into_tensor_and_resize(data, resolution):
+def load_into_tensor_and_resize(data, resolution, mask_model):
     img = Image.open(BytesIO(data)).convert('RGB')
-    W, H = img.size
-    desired_size = max(W, H)
-    delta_w = desired_size - W
-    delta_h = desired_size - H
-    padding = (delta_w // 2, delta_h // 2, delta_w - (delta_w // 2), delta_h - (delta_h // 2))
-    img = ImageOps.expand(img, padding)
-    img = img.resize((resolution, resolution), Image.LANCZOS)
 
-    img = torchvision.transforms.functional.to_tensor(img).cuda()
+    tf = transforms.Compose([transforms.Resize(resolution),
+                             transforms.CenterCrop(resolution), ])
+    img = tf(img)
+    img = torchvision.transforms.functional.to_tensor(img)
+
+    img_mask = mask.get_mask_from_image(mask_model, img)
+    img_mask = torch.where(img_mask > 0.6, 1., 0.)
+
+    img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
+
     return img
-
 
 # # Image Storage에 gltf, bin, thumbImg를 저장
 # def save_file_into_storage(title: str, catCode: str, gltf: bytes, bin: bytes, thumbImg: bytes):
@@ -151,7 +154,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...), X_AU
     if len(title) > 45:
         title = title[0:45]
     
-    image = load_into_tensor_and_resize(await file.read(),512)
+    image = load_into_tensor_and_resize(await file.read(),512, mask_model)
 
     predictor = predictor_models[category]
     dib_r = diffRenderers[samples_per_categories[category]]
@@ -169,7 +172,7 @@ async def convert(file: UploadFile = File(...), category : str = Form(...), X_AU
     # mv_images = style_gan.get_multiview_images(style_gan_models[category], torch.Tensor(cameras_info[category]), mesh, texture)
     #
     # # TODO: mask_rcnn을 사용할 지, IS_NET을 사용할 지 결정
-    # ''' in mask.py '''
+    # ''' in mask_mrcnn.py '''
     # # 이미지들의 sementic mask 얻기
     # mv_masks = mask.detect_mask(mask_model,[mv_images])
     #

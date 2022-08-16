@@ -9,7 +9,7 @@ from kaolin.render.mesh import dibr_rasterization, texture_mapping, \
 import os
 import torch
 import time
-import cv2
+import torchvision.utils as vutils
 
 import aspose.threed as a3d
 from PIL import Image
@@ -363,30 +363,11 @@ class DiffRender(object):
 
         cam_transform = kal.render.camera.generate_transformation_matrix(camera_pos, object_pos, camera_up)
 
-        cam_proj = self.cam_proj.cuda()
-
-        face_vertices_camera, face_vertices_image, face_normals = \
-            kal.render.mesh.prepare_vertices(
-                self.vertices, self.faces, cam_proj, camera_transform=cam_transform
-            )
-
-        face_attributes = [
-            self.face_uvs.repeat(self.test_batch_size, 1, 1, 1),
-            torch.ones((self.test_batch_size, self.num_faces, 3, 1), device='cuda'),
-        ]
-
-        image_features, soft_mask, face_idx = kal.render.mesh.dibr_rasterization(
-            self.image_size, self.image_size, face_vertices_camera[:, :, :, -1],
-            face_vertices_image, face_attributes, face_normals[:, :, -1])
-
-        texture_coords, mask = image_features
-        image = kal.render.mesh.texture_mapping(texture_coords,
-                                                self.textures.repeat(self.test_batch_size, 1, 1, 1),
-                                                mode='bilinear')
+        image, mask = self.render(cam_transform)
 
         image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
 
-        cv2.imwrite(f"{save_path}/thumbnail.png", image[0].cpu().detach().numpy())
+        vutils.save(image.detach(), f"{save_path}/thumbnail.png", normalize=True)
 
         return
 
