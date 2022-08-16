@@ -19,6 +19,7 @@ fi
 origin="/home/ec2-user/Matilda_Learning"
 cp -r ${origin}/predictor/PerceptualSimilarity ./predictor
 cp ${origin}/predictor/network/TOP.pth ./predictor/network
+cp ${origin}/mask/DIS/saved_models/isnet.pth ./mask/DIS/saved_models
 
 echo 'Process start'
 nohup uvicorn main:app --reload --host 0.0.0.0 --port 8100 >> nohup.out 2>&1 &
