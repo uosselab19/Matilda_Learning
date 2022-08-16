@@ -98,17 +98,24 @@ predictor_models, mask_model, diffRenderers = get_all_models()
 def load_into_tensor_and_resize(data, resolution, mask_model):
     img = Image.open(BytesIO(data)).convert('RGB')
 
-    tf = transforms.Compose([transforms.Resize(resolution),
-                             transforms.CenterCrop(resolution), ])
-    img = tf(img)
+    W, H = img.size
+    desired_size = max(W, H)
+    delta_w = desired_size - W
+    delta_h = desired_size - H
+    padding = (delta_w // 2, delta_h // 2, delta_w - (delta_w // 2), delta_h - (delta_h // 2))
+    img = ImageOps.expand(img, padding)
+
+    img = img.resize((resolution, resolution))
+
+    # tf = transforms.Compose([transforms.Resize(resolution),
+    #                          transforms.CenterCrop(resolution)])
+    # img = tf(img)
     img = torchvision.transforms.functional.to_tensor(img).cuda()
 
     img_mask = mask.get_mask_from_image(mask_model, img.unsqueeze(0))
     img_mask = torch.where(img_mask > 0.6, 1., 0.)
 
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
-
-    vutils.save_image(img.detach(), f"/home/ec2-user/Matilda_Learning/thumbnail.png", normalize=True)
 
     return img
 
