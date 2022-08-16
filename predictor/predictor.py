@@ -28,9 +28,10 @@ def get_predictor_model(template_path, resume_path, image_size):
 
     # netE: 3D attribute encoder: Light, Shape, and Texture
     netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32)
+    print(netE.state_dict())
     netE = netE.cuda()
     netE.eval()
- 
+
     print("=> loading checkpoint '{}'".format(resume_path))
     # Map model to be loaded to specified single gpu.
     checkpoint = torch.load(resume_path)
