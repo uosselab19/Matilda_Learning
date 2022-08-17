@@ -198,9 +198,12 @@ class DiffRender(object):
                              faces=faces, camera_proj=cam_proj, camera_transform=cam_transform
                              )
 
+        face_normals_unit = kal.ops.mesh.face_normals(face_vertices_camera, unit=True)
+        face_normals_unit = face_normals_unit.unsqueeze(-2).repeat(1, 1, 3, 1)
         face_attributes = [
+            torch.ones((self.batch_size, self.num_faces, 3, 1), device=device),
             self.face_uvs.repeat(self.batch_size, 1, 1, 1),
-            torch.ones((self.batch_size, self.num_faces, 3, 1), device='cuda')
+            face_normals_unit
         ]
 
         image_features, soft_mask, face_idx = dibr_rasterization(
@@ -208,10 +211,12 @@ class DiffRender(object):
             face_vertices_image, face_attributes, face_normals[:, :, -1])
 
         # image_features is a tuple in composed of the interpolated attributes of face_attributes
-        texture_coords, mask = image_features
-        image = kal.render.mesh.texture_mapping(texture_coords,
-                                                self.textures.repeat(self.batch_size, 1, 1, 1),
-                                                mode='bilinear')
+        texmask, texcoord, imnormal = image_features
+
+        texcolor = texture_mapping(texcoord, self.textures, mode='bilinear')
+        coef = spherical_harmonic_lighting(imnormal, self.lights)
+        image = texcolor * texmask * coef.unsqueeze(-1) + torch.ones_like(texcolor) * (1 - texmask)
+        image = torch.clamp(image, 0, 1)
         render_img = image.permute(0, 3, 1, 2)
         render_silhouttes = soft_mask
 
@@ -320,37 +325,37 @@ class DiffRender(object):
         loss_reg = self.laplacian_weight * loss_laplacian
         return loss_reg
 
-    def create_3d_object(self, vertices, textures, images, masks, cameras_info, category):
-        # path to the rendered image (using the data synthesizer)
-
-        save_path = f'./save/{category}/'
-
+    def save_object_by_train(self, vertices, textures, lights, images, masks, cameras_info, category, save_path):
         # dataloader 세팅
         self.set_dataloader(images, masks, cameras_info)
 
         # vertices, textures 저장
         self.vertices = vertices
         self.textures = textures
+        self.lights = lights
 
         # train
         self.train()
 
-        self.save_object(self.vertices, self.textures, cameras_info, category, save_path)
+        self.save_object(self.vertices, self.textures, category, save_path)
 
-        return save_path
+        return
 
-    def save_object(self, vertices, textures, cameras_pos, category, save_path):
+    def save_object(self, vertices, textures, lights, category, save_path):
         # path to the rendered image (using the data synthesizer)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        # vertices, textures 저장
+        # vertices, textures, lights 저장
         self.vertices = vertices
         self.textures = textures
+        self.lights = lights
 
         # save object
         self.export_into_gltf(save_path, category)
 
+        # For Test
+        cameras_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
         # save thumbnail img
         self.save_thumbnail(save_path, cameras_pos)
 

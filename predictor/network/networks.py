@@ -1,7 +1,5 @@
-# import torch related
 import torch
 import torch.nn as nn
-#import torch.nn.functional as F
 
 def deep_copy(att, index=None, detach=False):
     if index is None:
@@ -17,21 +15,24 @@ def deep_copy(att, index=None, detach=False):
                 copy_att[key] = value[index].clone()
     return copy_att
 
+
 def convblock(indim, outdim, ker, stride, pad):
     block2 = [
         nn.Conv2d(indim, outdim, ker, stride, pad),
-        nn.InstanceNorm2d(outdim),
+        nn.BatchNorm2d(outdim),
         nn.ReLU()
     ]
     return block2
 
+
 def linearblock(indim, outdim):
     block2 = [
         nn.Linear(indim, outdim),
-        nn.InstanceNorm1d(outdim),
+        nn.BatchNorm1d(outdim),
         nn.ReLU()
     ]
     return block2
+
 
 class ShapeEncoder(nn.Module):
     def __init__(self, nc, nk, num_vertices):
@@ -60,10 +61,10 @@ class ShapeEncoder(nn.Module):
         # Initialize with Xavier Glorot
         for m in self.modules():
             if isinstance(m, nn.ConvTranspose2d) \
-            or isinstance(m, nn.Linear) \
-            or isinstance(object, nn.Conv2d):
+                    or isinstance(m, nn.Linear) \
+                    or isinstance(object, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.001)
+                nn.init.normal_(m.weight, mean=0, std=0.01)
 
         # Free some memory
         del all_blocks, block1, block2, block3, linear1, linear2
@@ -73,7 +74,7 @@ class ShapeEncoder(nn.Module):
         for layer in self.encoder1:
             x = layer(x)
 
-        x = x.view(batch_size, 1, -1)
+        x = x.view(batch_size, -1)
         for layer in self.encoder2:
             x = layer(x)
 
@@ -82,6 +83,7 @@ class ShapeEncoder(nn.Module):
         delta_vertices = x.view(batch_size, self.num_vertices, 3)
         delta_vertices = torch.tanh(delta_vertices)
         return delta_vertices
+
 
 class LightEncoder(nn.Module):
     def __init__(self, nc, nk):
@@ -109,10 +111,10 @@ class LightEncoder(nn.Module):
         # Initialize with Xavier Glorot
         for m in self.modules():
             if isinstance(m, nn.ConvTranspose2d) \
-            or isinstance(m, nn.Linear) \
-            or isinstance(object, nn.Conv2d):
+                    or isinstance(m, nn.Linear) \
+                    or isinstance(object, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.001)
+                nn.init.normal_(m.weight, mean=0, std=0.01)
 
         # Free some memory
         del all_blocks, block1, block2, block3, linear1, linear2
@@ -122,7 +124,7 @@ class LightEncoder(nn.Module):
         for layer in self.encoder1:
             x = layer(x)
 
-        x = x.view(batch_size, 1, -1)
+        x = x.view(batch_size, -1)
         for layer in self.encoder2:
             x = layer(x)
         x = self.linear3(x)
@@ -134,18 +136,19 @@ class LightEncoder(nn.Module):
 
         return lightparam
 
+
 class TextureEncoder(nn.Module):
     def __init__(self, nc, nf, nk, num_vertices):
         super(TextureEncoder, self).__init__()
         self.num_vertices = num_vertices
 
-        block1 = convblock(nc, nf//2, nk, stride=2, pad=2)
-        block2 = convblock(nf//2, nf, nk, stride=2, pad=2)
+        block1 = convblock(nc, nf // 2, nk, stride=2, pad=2)
+        block2 = convblock(nf // 2, nf, nk, stride=2, pad=2)
         block3 = convblock(nf, nf * 2, nk, stride=2, pad=2)
         block4 = convblock(nf * 2, nf * 4, nk, stride=2, pad=2)
         block5 = convblock(nf * 4, nf * 8, nk, stride=2, pad=2)
 
-        avgpool = [nn.AdaptiveAvgPool2d(2)]
+        avgpool = [nn.AdaptiveAvgPool2d(1)]
 
         linear1 = convblock(nf * 8, nf * 16, 1, stride=1, pad=0)
         linear2 = convblock(nf * 16, nf * 8, 1, stride=1, pad=0)
@@ -160,45 +163,45 @@ class TextureEncoder(nn.Module):
         # Initialize with Xavier Glorot
         for m in self.modules():
             if isinstance(m, nn.ConvTranspose2d) \
-            or isinstance(m, nn.Linear) \
-            or isinstance(object, nn.Conv2d):
+                    or isinstance(m, nn.Linear) \
+                    or isinstance(object, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.001)
+                nn.init.normal_(m.weight, mean=0, std=0.01)
 
         # Free some memory
         del all_blocks, block1, block2, block3, block4, block5, linear1, linear2
 
         self.texture_flow = nn.Sequential(
             # input is Z, going into a convolution
-            nn.Upsample(scale_factor=2),
+            nn.Upsample(scale_factor=4),
             nn.Conv2d(nf * 8, nf * 8, 3, 1, 1),
-            nn.InstanceNorm2d(nf * 8),
+            nn.BatchNorm2d(nf * 8),
             nn.ReLU(True),
 
             # state size. (nf*8) x 8 x 8
             nn.Upsample(scale_factor=2),
             nn.Conv2d(nf * 8, nf * 8, 3, 1, 1, padding_mode='reflect'),
-            nn.InstanceNorm2d(nf * 8),
+            nn.BatchNorm2d(nf * 8),
             nn.ReLU(True),
             # state size. (nf*4) x 16 x 16
             nn.Upsample(scale_factor=2),
             nn.Conv2d(nf * 8, nf * 4, 3, 1, 1, padding_mode='reflect'),
-            nn.InstanceNorm2d(nf * 4),
+            nn.BatchNorm2d(nf * 4),
             nn.ReLU(True),
             # state size. (nf*2) x 32 x 32
             nn.Upsample(scale_factor=2),
             nn.Conv2d(nf * 4, nf * 2, 3, 1, 1, padding_mode='reflect'),
-            nn.InstanceNorm2d(nf * 2),
+            nn.BatchNorm2d(nf * 2),
             nn.ReLU(True),
             # state size. (nf) x 64 x 64
             nn.Upsample(scale_factor=2),
             nn.Conv2d(nf * 2, nf * 2, 3, 1, 1, padding_mode='reflect'),
-            nn.InstanceNorm2d(nf * 2),
+            nn.BatchNorm2d(nf * 2),
             nn.ReLU(True),
             # state size. (nf) x 128 x 128
             nn.Upsample(scale_factor=2),
             nn.Conv2d(nf * 2, nf, 3, 1, 1, padding_mode='reflect'),
-            nn.InstanceNorm2d(nf),
+            nn.BatchNorm2d(nf),
             nn.ReLU(True),
             # state size. (nf) x 256 x 256
             nn.Upsample(scale_factor=2),
@@ -208,14 +211,17 @@ class TextureEncoder(nn.Module):
 
     def forward(self, x):
         x = x[:, :3]
+        batch_size = x.shape[0]
         x = self.encoder1(x)
+        x = x.view(batch_size, -1, 1, 1)
         x = self.encoder2(x)
-        textures = (self.texture_flow(x) + 1) / 2 # (batch_size, 3, 256, 256)
+        textures = (self.texture_flow(x) + 1) / 2  # (batch_size, 3, 256, 256)
 
         return textures
 
+
 class AttributeEncoder(nn.Module):
-    def __init__(self, num_vertices, vertices_init,nc, nf, nk):
+    def __init__(self, num_vertices, vertices_init, nc, nf, nk):
         super(AttributeEncoder, self).__init__()
         self.num_vertices = num_vertices
         self.vertices_init = vertices_init
@@ -226,6 +232,7 @@ class AttributeEncoder(nn.Module):
 
     def forward(self, x):
         device = x.device
+        batch_size = x.shape[0]
         input_img = x
 
         # vertex
@@ -238,9 +245,9 @@ class AttributeEncoder(nn.Module):
 
         # others
         attributes = {
-        'vertices': vertices,
-        'delta_vertices': delta_vertices,
-        'textures': textures,
-        'lights': lights
+            'vertices': vertices,
+            'delta_vertices': delta_vertices,
+            'textures': textures,
+            'lights': lights
         }
         return attributes

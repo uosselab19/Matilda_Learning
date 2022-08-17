@@ -162,41 +162,26 @@ async def convert(file: UploadFile = File(...), category : str = Form(...), X_AU
     if len(title) > 45:
         title = title[0:45]
     
-    image = load_into_tensor_and_resize(await file.read(),512, mask_model)
+    image = load_into_tensor_and_resize(await file.read(),512, mask_model) # image 사이즈 조절 및 tensor로 변환
 
-    predictor = predictor_models[category]
-    dib_r = diffRenderers[samples_per_categories[category]]
+    predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
+    dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
 
     ''' in predictor.py '''
-    # image를 넣어 mesh, texture 생성
+    # image를 넣어 mesh, texture, lights 생성
     attributes = predictor(image.unsqueeze(0))
 
     mesh = attributes['vertices']
     texture = attributes['textures']
-    #lights = attributes['lights']
+    lights = attributes['lights']
 
-    # ''' in style_gan.py '''
-    # # mesh, texture를 style gan network에 넣어 다각도 이미지 생성
-    # mv_images = style_gan.get_multiview_images(style_gan_models[category], torch.Tensor(cameras_info[category]), mesh, texture)
-    #
-    # # TODO: mask_rcnn을 사용할 지, IS_NET을 사용할 지 결정
-    # ''' in mask_mrcnn.py '''
-    # # 이미지들의 sementic mask 얻기
-    # mv_masks = mask.detect_mask(mask_model,[mv_images])
-    #
     ''' in predictor.py '''
-    # 3D Object 생성
-    # obj_dir_path, thumb_nail_img = dib_r.create_3d_object(mesh, texture, mv_images, mv_masks, cameras_info[category], category)
-
-    # For Test
-    cam_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
-
     # 파일 저장되는 위치
-    # save_path = f'./save/{category}/{time.time()}/'
     dirName = category + '/' + str(int(datetime.now().timestamp())) + '_' + title
     saveUrl = os.path.join(PATH, dirName)
 
-    dib_r.save_object(mesh, texture, cam_pos, category, saveUrl)
+    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.gltf) 추출하기
+    dib_r.save_object(mesh, texture, lights, category, saveUrl)
 
     # WAS로 saveUrl 전달
     response = save_file_into_repository(title, category, os.path.join('items', dirName), X_AUTH_TOKEN)
