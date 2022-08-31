@@ -465,4 +465,4 @@ class DiffRender(object):
         scn.open(ind_out_path)
         scn.save(save_file_path, a3d.FileFormat.GLTF_Binary)
 
-        return
+        return save_file_path

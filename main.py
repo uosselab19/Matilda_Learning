@@ -163,8 +163,8 @@ async def convert(file: UploadFile = File(...), category : str = Form(...), X_AU
     dirName = category + '/' + str(int(datetime.now().timestamp())) + '_' + title
     saveUrl = os.path.join(PATH, dirName)
 
-    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.gltf) 추출하기
-    dib_r.save_object(mesh, texture, lights, category, saveUrl)
+    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.glb) 추출하기
+    objUrl = dib_r.save_object(mesh, texture, lights, category, saveUrl)
 
     # WAS로 saveUrl 전달
     response = save_file_into_repository(title, category, os.path.join('items', dirName), X_AUTH_TOKEN)
