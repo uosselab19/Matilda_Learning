@@ -52,9 +52,7 @@ for cate in categories:
         print("프로그램을 종료합니다.")
         exit()
 
-# categories = ['ring','shirts','pants','hat','necklace','bag'] # TODO: 카테고리 추가
-#samples_per_categories = {'ring' : 'torus', 'shirts': 'sphere', 'pants': 'sphere', 'hat': 'sphere', 'necklace': 'torus', 'bag': 'torus'}
-samples_per_categories = {'TOP' : 'sphere'}
+samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
 
 def get_all_models():
     image_size = 512
@@ -89,6 +87,7 @@ def load_cameras_info(root):
         cameras_info[category] = np.load(f'{root}{category}.npy')
     return cameras_info
 
+''' 모델 및 카메라 정보 가져오기'''
 predictor_models, mask_model, diffRenderers = get_all_models()
 
 # 카메라 정보 불러오기
@@ -117,21 +116,6 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
 
     return img
-
-# # Image Storage에 gltf, bin, thumbImg를 저장
-# def save_file_into_storage(title: str, catCode: str, gltf: bytes, bin: bytes, thumbImg: bytes):
-#     dirName = catCode + '\\' + str(int(datetime.now().timestamp())) + '_' + title
-#     saveUrl = os.path.join(PATH, dirName)
-#     os.makedirs(saveUrl)
-
-#     with open(os.path.join(saveUrl, '2CylinderEngine.gltf'), "wb") as f:
-#         f.write(gltf)
-#     with open(os.path.join(saveUrl, '2CylinderEngine.bin'), "wb") as f:
-#         f.write(bin)
-#     with open(os.path.join(saveUrl, 'thumbImg.jpg'), "wb") as f:
-#         f.write(thumbImg)
-
-#     return dirName
 
 # WAS를 통해 Repository에 파일 저장
 URL = "http://3.133.233.81:8080"
@@ -175,7 +159,6 @@ async def convert(file: UploadFile = File(...), category : str = Form(...), X_AU
     texture = attributes['textures']
     lights = attributes['lights']
 
-    ''' in predictor.py '''
     # 파일 저장되는 위치
     dirName = category + '/' + str(int(datetime.now().timestamp())) + '_' + title
     saveUrl = os.path.join(PATH, dirName)

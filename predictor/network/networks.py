@@ -24,7 +24,6 @@ def convblock(indim, outdim, ker, stride, pad):
     ]
     return block2
 
-
 def linearblock(indim, outdim):
     block2 = [
         nn.Linear(indim, outdim),
@@ -32,7 +31,6 @@ def linearblock(indim, outdim):
         nn.ReLU()
     ]
     return block2
-
 
 class ShapeEncoder(nn.Module):
     def __init__(self, nc, nk, num_vertices):
@@ -64,7 +62,7 @@ class ShapeEncoder(nn.Module):
                     or isinstance(m, nn.Linear) \
                     or isinstance(object, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.01)
+                nn.init.normal_(m.weight, mean=0, std=0.001)
 
         # Free some memory
         del all_blocks, block1, block2, block3, linear1, linear2
@@ -114,7 +112,7 @@ class LightEncoder(nn.Module):
                     or isinstance(m, nn.Linear) \
                     or isinstance(object, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.01)
+                nn.init.normal_(m.weight, mean=0, std=0.001)
 
         # Free some memory
         del all_blocks, block1, block2, block3, linear1, linear2
@@ -166,7 +164,7 @@ class TextureEncoder(nn.Module):
                     or isinstance(m, nn.Linear) \
                     or isinstance(object, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.01)
+                nn.init.normal_(m.weight, mean=0, std=0.001)
 
         # Free some memory
         del all_blocks, block1, block2, block3, block4, block5, linear1, linear2
@@ -232,7 +230,6 @@ class AttributeEncoder(nn.Module):
 
     def forward(self, x):
         device = x.device
-        batch_size = x.shape[0]
         input_img = x
 
         # vertex

@@ -1,5 +1,19 @@
 # Matilda Machine Learning
 * * *
+<b> Matilda can procede 3d object by only one image !! </b>
+<br>
+we provice categories 
+
++ DR : dress
++ TOP : shirts
++ BTM : pants
++ HEA : hat
++ BRA : bra(?)
++ NEC : neckless
++ BAG : bag 
++ MAS : mask 
++ RIN : ring
+
 ## Required libraries
 * * *
 + pip install -r requirements.txt 

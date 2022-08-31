@@ -389,13 +389,11 @@ class DiffRender(object):
         img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
 
         texture_dir = posixpath.join(save_path, 'textures')
-        rel_filepath = posixpath.join('textures', f'{mesh_name}_diffuse.png')
-
         if not os.path.exists(texture_dir):
             os.makedirs(texture_dir)
 
-        texture_file = f'{mesh_name}_diffuse.png'
-        img.save(posixpath.join(texture_dir, texture_file))
+        rel_filepath = posixpath.join('textures', f'{mesh_name}_diffuse.png')
+        img.save(rel_filepath)
 
         # create stage
         scene_path = "/TexModel"
@@ -461,11 +459,10 @@ class DiffRender(object):
 
         stage.Save()
 
-        save_file_path = f"{save_path}/{category}.gltf"
-        # bin_path = f"{save_path}buffer.bin"
+        save_file_path = f"{save_path}/{category}.glb"
 
         scn = a3d.Scene()
         scn.open(ind_out_path)
-        scn.save(save_file_path, a3d.FileFormat.GLTF2)
+        scn.save(save_file_path, a3d.FileFormat.GLTF_Binary)
 
         return
