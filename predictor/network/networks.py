@@ -68,7 +68,6 @@ def linearblock(indim, outdim):
     ]
     return block2
 
-
 class AttBlock(nn.Module):
     def __init__(self, nc, nk, nf, out_dim, method):
         super(AttBlock, self).__init__()
@@ -116,7 +115,6 @@ class AttBlock(nn.Module):
             x = x.view(batch_size, -1, 1, 1)
             x = self.encoder2(x)
         return x
-
 
 class ShapeEncoder(nn.Module):
     def __init__(self, nc, nk, nf, num_vertices, vertices_init=None):
