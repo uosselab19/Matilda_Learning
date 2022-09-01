@@ -40,34 +40,10 @@ app.add_middleware(
 categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
 
-# WAS를 통해 Repository에 파일 저장
-URL = "http://3.133.233.81:8080"
-
-
-def save_fileinfo_into_repository(title: str, catCode: str, imgUrl: str, objectUrl: str, token: str) -> str:
-    memberNum = jwt.decode(token, options={"verify_signature": False})['num']
-    body = {
-        "title": title,
-        "catCode": catCode,
-        "imgUrl": imgUrl,
-        "memberNum": memberNum,
-        "objectUrl": objectUrl
-    }
-    response = httpx.post(URL + '/items/new', json=body)
-    return response.json()
-
-def get_fileinfo_from_repository(num: int, token: str) -> str:
-    response = httpx.get(URL + '/objects/auth/objUrl/' +
-                         str(num), headers={'X-AUTH-TOKEN': token})
-
-    return response.text
-
-bucketMatilda = boto3.resource('s3').Bucket('matilda.image-storage')
-
 def get_all_models():
     image_size = 512
 
-    style_gan_models = {}
+    #style_gan_models = {}
     predictor_models = {}
     diffRenderers = {}
 
@@ -86,32 +62,48 @@ def get_all_models():
 
     # mask 모델 불러오기
     model_path = "./mask/DIS/saved_models/isnet.pth"  ## load trained weights from this path
-    #mask_weights_path = "./mask/weight/mask_rcnn_matilda_0110.h5"
     mask_model = mask.get_mask_model(model_path)
 
     return predictor_models, mask_model, diffRenderers
 
-def save_file_into_S3(localfilePath: str, targetfilePath: str):
-    bucketMatilda.upload_file(localfilePath, targetfilePath)
-    return True
-
-def load_cameras_info(root):
-    cameras_info = {}
-    for category in categories:
-        cameras_info[category] = np.load(f'{root}{category}.npy')
-    return cameras_info
-
 ''' 모델 및 카메라 정보 가져오기'''
 predictor_models, mask_model, diffRenderers = get_all_models()
 
+# WAS를 통해 Repository에 파일 저장
+URL = "http://3.133.233.81:8080"
+def save_fileinfo_into_repository(title: str, catCode: str, saveUrl: str, token: str):
+    memberNum = jwt.decode(token, options={"verify_signature": False})['num']
+    body = {
+        "title": title,
+        "catCode": catCode,
+        "imgUrl": saveUrl + '/thumbImg.jpg',
+        "memberNum": memberNum,
+        "objectUrl": saveUrl
+    }
+    response = httpx.post(URL + '/items/new', json=body)
+    return response.json()
+
+def get_fileinfo_from_repository(num: int, token: str) -> str:
+    response = httpx.get(URL + '/objects/auth/objUrl/' +
+                         str(num), headers={'X-AUTH-TOKEN': token})
+
+    return response.text
+
+bucketMatilda = boto3.resource('s3').Bucket('matilda.image-storage')
+
+def save_file_into_S3(localfilePath: str, targetfilePath: str):
+
+    bucketMatilda.upload_file(localfilePath, targetfilePath)
+
+    return True
+
 def get_file_from_S3(filePath: str) -> io.BytesIO:
     fileData = io.BytesIO()
+
     bucketMatilda.download_fileobj(filePath, fileData)
     fileData.seek(0)
-    return fileData
 
-# 카메라 정보 불러오기
-#cameras_info = load_cameras_info('./predictor/samples/')
+    return fileData
 
 def load_into_tensor_and_resize(data, resolution, mask_model):
     img = Image.open(BytesIO(data)).convert('RGB')
@@ -137,66 +129,9 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
 
     return img
 
-# # Image Storage에 gltf, bin, thumbImg를 저장
-# def save_file_into_storage(title: str, catCode: str, gltf: bytes, bin: bytes, thumbImg: bytes):
-#     dirName = catCode + '\\' + str(int(datetime.now().timestamp())) + '_' + title
-#     saveUrl = os.path.join(PATH, dirName)
-#     os.makedirs(saveUrl)
-
-#     with open(os.path.join(saveUrl, '2CylinderEngine.gltf'), "wb") as f:
-#         f.write(gltf)
-#     with open(os.path.join(saveUrl, '2CylinderEngine.bin'), "wb") as f:
-#         f.write(bin)
-#     with open(os.path.join(saveUrl, 'thumbImg.jpg'), "wb") as f:
-#         f.write(thumbImg)
-
-#     return dirName
-
-# WAS를 통해 Repository에 파일 저장
-URL = "http://3.133.233.81:8080"
-def save_file_into_repository(title: str, catCode: str, saveUrl: str, token: str):
-    memberNum = jwt.decode(token, options={"verify_signature": False})['num']
-    body = {
-        "title": title,
-        "catCode": catCode,
-        "imgUrl": saveUrl + '/thumbImg.jpg',
-        "memberNum": memberNum,
-        "objectUrl": saveUrl
-    }
-    response = httpx.post(URL + '/items/new', json=body)
-    return response.json()
-
-
-def get_fileinfo_from_repository(num: int, token: str) -> str:
-    response = httpx.get(URL + '/objects/auth/objUrl/' +
-                         str(num), headers={'X-AUTH-TOKEN': token})
-
-    return response.text
-
-
-bucketMatilda = boto3.resource('s3').Bucket('matilda.image-storage')
-
-
-def save_file_into_S3(localfilePath: str, targetfilePath: str):
-
-    bucketMatilda.upload_file(localfilePath, targetfilePath)
-
-    return True
-
-
-def get_file_from_S3(filePath: str) -> io.BytesIO:
-    fileData = io.BytesIO()
-
-    bucketMatilda.download_fileobj(filePath, fileData)
-    fileData.seek(0)
-
-    return fileData
-
-
 @app.get("/")
 async def root():
     return {"Welcome"}
-
 
 @app.post("/convert")
 async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUTH_TOKEN: str = Header()):
@@ -216,35 +151,29 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
 
     attributes = predictor(image.unsqueeze(0))
     
+    mesh = attributes['vertices']
+    texture = attributes['textures']
+    lights = attributes['lights']
+    
     # 파일 이름에 사용 할 시간 정보
     now = str(int(datetime.now().timestamp()))
 
     # 파일이 로컬에 임시로 저장될 위치
-    obj_save_path = './temp/' + now + '/obj.glb'
-    img_save_path = './temp/' + now + '/img.jpg'
+    save_path = './temp/' + now + '/'
 
-    mesh = attributes['vertices']
-    texture = attributes['textures']
-    lights = attributes['lights']
-
-    ''' in predictor.py '''
+    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.glb) 추출하기
+    obj_save_path, img_save_path = dib_r.save_object(mesh, texture, lights, category, save_path)
+    
     # 파일이 S3에 저장될 위치
     objPath = 'items/obj/' + category + '/' + now + '_' + title + '.glb'
     imgPath = 'items/img/' + category + '/' + now + '_' + title + '.jpg'
-
-    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.glb) 추출하기
-    objUrl = dib_r.save_object(mesh, texture, lights, category, saveUrl)
 
     # S3에 파일 저장
     save_file_into_S3(obj_save_path, objPath)
     save_file_into_S3(img_save_path, imgPath)
 
     # 로컬 파일 삭제
-    os.remove(obj_save_path)
-    os.remove(img_save_path)
-
-    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.gltf) 추출하기
-    dib_r.save_object(mesh, texture, lights, category, saveUrl)
+    os.remove(save_path)
 
     # WAS로 saveUrl 전달
     response = save_fileinfo_into_repository(

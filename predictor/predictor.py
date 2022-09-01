@@ -342,9 +342,8 @@ class DiffRender(object):
         return
 
     def save_object(self, vertices, textures, lights, category, save_path):
-        # path to the rendered image (using the data synthesizer)
         if not os.path.exists(save_path):
-            os.makedirs(save_path)
+            os.makedirs(save_path, exist_ok=True)
 
         # vertices, textures, lights 저장
         self.vertices = vertices
@@ -352,16 +351,19 @@ class DiffRender(object):
         self.lights = lights
 
         # save object
-        self.export_into_gltf(save_path, category)
+        obj_save_path = self.export_into_glb(save_path, category)
 
         # For Test
         cameras_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
+        
         # save thumbnail img
-        self.save_thumbnail(save_path, cameras_pos)
+        img_save_path = self.save_thumbnail(save_path, cameras_pos)
 
-        return
+        return obj_save_path, img_save_path
 
     def save_thumbnail(self, save_path, camera_pos):
+        img_save_path = save_path + 'img.png'
+        
         # This is similar to a training iteration (without the loss part)
         object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float).cuda()
         camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float).cuda()
@@ -372,36 +374,30 @@ class DiffRender(object):
 
         image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
 
-        vutils.save_image(image.detach(), f"{save_path}/thumbnail.png", normalize=True)
+        vutils.save_image(image.detach(), img_save_path, normalize=True)
 
         return
 
-    def export_into_gltf(self, save_path, category):
+    def export_into_glb(self, save_path, category):
         time = Usd.TimeCode.Default()
 
-        # 저장할 object name setting
-        mesh_name = f'mesh_{category}'
-        ind_out_path = posixpath.join(save_path, f'{mesh_name}.usdc')
+        # object usdc file path
+        usd_path = save_path + 'mesh.usdc'
 
         # save texture
         img_tensor = torch.clamp(self.textures[0], 0., 1.)
         img_tensor_uint8 = (img_tensor * 255.).clamp_(0, 255).permute(1, 2, 0).to(torch.uint8)
         img = Image.fromarray(img_tensor_uint8.squeeze().cpu().numpy())
 
-        texture_dir = posixpath.join(save_path, 'textures')
-        if not os.path.exists(texture_dir):
-            os.makedirs(texture_dir)
-
-        rel_filepath = posixpath.join('textures', f'{mesh_name}_diffuse.png')
+        rel_filepath = save_path + 'diffuse.png'
         img.save(rel_filepath)
 
         # create stage
         scene_path = "/TexModel"
-        print(ind_out_path)
-        if os.path.exists(ind_out_path):
-            stage = Usd.Stage.Open(ind_out_path)
+        if os.path.exists(usd_path):
+            stage = Usd.Stage.Open(usd_path)
         else:
-            stage = Usd.Stage.CreateNew(ind_out_path)
+            stage = Usd.Stage.CreateNew(usd_path)
         UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
         modelRoot = UsdGeom.Xform.Define(stage, scene_path)
         Usd.ModelAPI(modelRoot).SetKind(Kind.Tokens.component)
@@ -459,10 +455,9 @@ class DiffRender(object):
 
         stage.Save()
 
-        save_file_path = f"{save_path}/{category}.glb"
-
         scn = a3d.Scene()
-        scn.open(ind_out_path)
-        scn.save(save_file_path, a3d.FileFormat.GLTF_Binary)
+        scn.open(usd_path)
+        obj_save_path = save_path + 'obj.glb'
+        scn.save(obj_save_path, a3d.FileFormat.GLTF_Binary)
 
-        return save_file_path
+        return obj_save_path
