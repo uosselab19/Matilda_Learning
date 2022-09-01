@@ -55,7 +55,7 @@ def get_all_models():
         #style_gan_models[category] = style_gan.get_models(style_gan_network_path)
 
         # predictor
-        predictor_model_path = f'./predictor/network/{category}.pth'
+        predictor_model_path = f'./predictor/network/models/{category}.pth'
         init_mesh_path = f"./predictor/samples/{samples_per_categories[category]}.obj"
         predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size)
         predictor_models[category] = predictor_model
