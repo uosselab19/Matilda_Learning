@@ -1,5 +1,40 @@
 import torch
 import torch.nn as nn
+import math
+
+def net_init(modules):
+    for m in modules:
+        if isinstance(m, nn.ConvTranspose2d) \
+        or isinstance(m, nn.Linear) \
+        or isinstance(object, nn.Conv2d):
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.normal_(m.weight, mean=0, std=0.001)
+
+def camera_position_from_spherical_angles(dist, elev, azim, degrees=True):
+    """
+    Calculate the location of the camera based on the distance away from
+    the target point, the elevation and azimuth angles.
+    Args:
+        distance: distance of the camera from the object.
+        elevation, azimuth: angles.
+            The inputs distance, elevation and azimuth can be one of the following
+                - Python scalar
+                - Torch scalar
+                - Torch tensor of shape (N) or (1)
+        degrees: bool, whether the angles are specified in degrees or radians.
+        device: str or torch.device, device for new tensors to be placed on.
+    The vectors are broadcast against each other so they all have shape (N, 1).
+    Returns:
+        camera_position: (N, 3) xyz location of the camera.
+    """
+    if degrees:
+        elev = math.pi / 180.0 * elev
+        azim = math.pi / 180.0 * azim
+    x = dist * torch.cos(elev) * torch.sin(azim)
+    y = dist * torch.sin(elev)
+    z = dist * torch.cos(elev) * torch.cos(azim)
+    camera_position = torch.stack([x, y, z], dim=1)
+    return camera_position.reshape(-1, 3)
 
 def deep_copy(att, index=None, detach=False):
     if index is None:
@@ -7,7 +42,7 @@ def deep_copy(att, index=None, detach=False):
 
     copy_att = {}
     for key, value in att.items():
-        copy_keys = ['vertices', 'delta_vertices', 'textures', 'lights']
+        copy_keys = ['camera_pos', 'object_pos', 'camera_up', 'vertices', 'delta_vertices', 'textures', 'lights']
         if key in copy_keys:
             if detach:
                 copy_att[key] = value[index].clone().detach()
@@ -24,6 +59,7 @@ def convblock(indim, outdim, ker, stride, pad):
     ]
     return block2
 
+
 def linearblock(indim, outdim):
     block2 = [
         nn.Linear(indim, outdim),
@@ -32,23 +68,27 @@ def linearblock(indim, outdim):
     ]
     return block2
 
-class ShapeEncoder(nn.Module):
-    def __init__(self, nc, nk, num_vertices):
-        super(ShapeEncoder, self).__init__()
-        self.num_vertices = num_vertices
 
-        block1 = convblock(nc, 32, nk, stride=2, pad=2)
-        block2 = convblock(32, 64, nk, stride=2, pad=2)
-        block3 = convblock(64, 128, nk, stride=2, pad=2)
-        block4 = convblock(128, 256, nk, stride=2, pad=2)
-        block5 = convblock(256, 512, nk, stride=2, pad=2)
+class AttBlock(nn.Module):
+    def __init__(self, nc, nk, nf, out_dim, method):
+        super(AttBlock, self).__init__()
+        self.method = method
+
+        block1 = convblock(nc, nf // 2, nk, stride=2, pad=2)
+        block2 = convblock(nf // 2, nf, nk, stride=2, pad=2)
+        block3 = convblock(nf, nf * 2, nk, stride=2, pad=2)
+        block4 = convblock(nf * 2, nf * 4, nk, stride=2, pad=2)
+        block5 = convblock(nf * 4, nf * 8, nk, stride=2, pad=2)
 
         avgpool = [nn.AdaptiveAvgPool2d(1)]
 
-        linear1 = linearblock(512, 1024)
-        linear2 = linearblock(1024, 1024)
-        self.linear3 = nn.Linear(1024, self.num_vertices * 3)
-
+        if method == 'linear':
+            linear1 = linearblock(nf * 8, nf * 16)
+            linear2 = linearblock(nf * 16, nf * 16)
+            self.linear3 = nn.Linear(nf * 16, out_dim)
+        elif method == 'conv':
+            linear1 = convblock(nf * 8, nf * 16, 1, stride=1, pad=0)
+            linear2 = convblock(nf * 16, nf * 8, 1, stride=1, pad=0)
         #################################################
         all_blocks = block1 + block2 + block3 + block4 + block5 + avgpool
         self.encoder1 = nn.Sequential(*all_blocks)
@@ -57,26 +97,37 @@ class ShapeEncoder(nn.Module):
         self.encoder2 = nn.Sequential(*all_blocks)
 
         # Initialize with Xavier Glorot
-        for m in self.modules():
-            if isinstance(m, nn.ConvTranspose2d) \
-                    or isinstance(m, nn.Linear) \
-                    or isinstance(object, nn.Conv2d):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.001)
+        net_init(self.modules())
 
         # Free some memory
-        del all_blocks, block1, block2, block3, linear1, linear2
+        del all_blocks, block1, block2, block3, \
+            linear1, linear2
+
+    def forward(self, x):
+
+        batch_size = x.shape[0]
+        x = self.encoder1(x)
+
+        if self.method == 'linear':
+            x = x.view(batch_size, -1)
+            x = self.encoder2(x)
+            x = self.linear3(x)
+        else:
+            x = x.view(batch_size, -1, 1, 1)
+            x = self.encoder2(x)
+        return x
+
+
+class ShapeEncoder(nn.Module):
+    def __init__(self, nc, nk, nf, num_vertices, vertices_init=None):
+        super(ShapeEncoder, self).__init__()
+        self.num_vertices = num_vertices
+
+        self.enc = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=self.num_vertices * 3, method='linear')
 
     def forward(self, x):
         batch_size = x.shape[0]
-        for layer in self.encoder1:
-            x = layer(x)
-
-        x = x.view(batch_size, -1)
-        for layer in self.encoder2:
-            x = layer(x)
-
-        x = self.linear3(x)
+        x = self.enc(x)
 
         delta_vertices = x.view(batch_size, self.num_vertices, 3)
         delta_vertices = torch.tanh(delta_vertices)
@@ -84,48 +135,13 @@ class ShapeEncoder(nn.Module):
 
 
 class LightEncoder(nn.Module):
-    def __init__(self, nc, nk):
+    def __init__(self, nc, nf, nk):
         super(LightEncoder, self).__init__()
 
-        block1 = convblock(nc, 32, nk, stride=2, pad=2)
-        block2 = convblock(32, 64, nk, stride=2, pad=2)
-        block3 = convblock(64, 128, nk, stride=2, pad=2)
-        block4 = convblock(128, 256, nk, stride=2, pad=2)
-        block5 = convblock(256, 512, nk, stride=2, pad=2)
-
-        avgpool = [nn.AdaptiveAvgPool2d(1)]
-
-        linear1 = linearblock(512, 1024)
-        linear2 = linearblock(1024, 1024)
-        self.linear3 = nn.Linear(1024, 9)
-
-        #################################################
-        all_blocks = block1 + block2 + block3 + block4 + block5 + avgpool
-        self.encoder1 = nn.Sequential(*all_blocks)
-
-        all_blocks = linear1 + linear2
-        self.encoder2 = nn.Sequential(*all_blocks)
-
-        # Initialize with Xavier Glorot
-        for m in self.modules():
-            if isinstance(m, nn.ConvTranspose2d) \
-                    or isinstance(m, nn.Linear) \
-                    or isinstance(object, nn.Conv2d):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.001)
-
-        # Free some memory
-        del all_blocks, block1, block2, block3, linear1, linear2
+        self.enc = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=9, method='linear')
 
     def forward(self, x):
-        batch_size = x.shape[0]
-        for layer in self.encoder1:
-            x = layer(x)
-
-        x = x.view(batch_size, -1)
-        for layer in self.encoder2:
-            x = layer(x)
-        x = self.linear3(x)
+        x = self.enc(x)
 
         lightparam = torch.tanh(x)
         scale = torch.tensor([[0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]], dtype=torch.float32).cuda()
@@ -140,34 +156,7 @@ class TextureEncoder(nn.Module):
         super(TextureEncoder, self).__init__()
         self.num_vertices = num_vertices
 
-        block1 = convblock(nc, nf // 2, nk, stride=2, pad=2)
-        block2 = convblock(nf // 2, nf, nk, stride=2, pad=2)
-        block3 = convblock(nf, nf * 2, nk, stride=2, pad=2)
-        block4 = convblock(nf * 2, nf * 4, nk, stride=2, pad=2)
-        block5 = convblock(nf * 4, nf * 8, nk, stride=2, pad=2)
-
-        avgpool = [nn.AdaptiveAvgPool2d(1)]
-
-        linear1 = convblock(nf * 8, nf * 16, 1, stride=1, pad=0)
-        linear2 = convblock(nf * 16, nf * 8, 1, stride=1, pad=0)
-
-        #################################################
-        all_blocks = block1 + block2 + block3 + block4 + block5 + avgpool
-        self.encoder1 = nn.Sequential(*all_blocks)
-
-        all_blocks = linear1 + linear2
-        self.encoder2 = nn.Sequential(*all_blocks)
-
-        # Initialize with Xavier Glorot
-        for m in self.modules():
-            if isinstance(m, nn.ConvTranspose2d) \
-                    or isinstance(m, nn.Linear) \
-                    or isinstance(object, nn.Conv2d):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.normal_(m.weight, mean=0, std=0.001)
-
-        # Free some memory
-        del all_blocks, block1, block2, block3, block4, block5, linear1, linear2
+        self.enc = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=None, method='conv')
 
         self.texture_flow = nn.Sequential(
             # input is Z, going into a convolution
@@ -209,31 +198,81 @@ class TextureEncoder(nn.Module):
 
     def forward(self, x):
         x = x[:, :3]
-        batch_size = x.shape[0]
-        x = self.encoder1(x)
-        x = x.view(batch_size, -1, 1, 1)
-        x = self.encoder2(x)
+        x = self.enc(x)
         textures = (self.texture_flow(x) + 1) / 2  # (batch_size, 3, 256, 256)
 
         return textures
 
 
+class CameraEncoder(nn.Module):
+    def __init__(self, nc, nk, nf, azi_scope, elev_range, dist_range):
+        super(CameraEncoder, self).__init__()
+
+        self.azi_scope = float(azi_scope)
+
+        elev_range = elev_range.split('~')
+        self.elev_min = float(elev_range[0])
+        self.elev_max = float(elev_range[1])
+
+        dist_range = dist_range.split('~')
+        self.dist_min = float(dist_range[0])
+        self.dist_max = float(dist_range[1])
+
+        self.pred_cam_pos_encoder = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=4, method='linear')
+        self.pred_obj_pos_encoder = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=3, method='linear')
+        self.pred_cam_up_encoder = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=3, method='linear')
+
+    def atan2(self, y, x):
+        r = torch.sqrt(x ** 2 + y ** 2 + 1e-12) + 1e-6
+        phi = torch.sign(y) * torch.acos(x / r) * 180.0 / math.pi
+        return phi
+
+    def forward(self, feat):
+        camera_pos_att = self.pred_cam_pos_encoder.forward(feat)
+
+        # cameras
+        distances = self.dist_min + torch.sigmoid(camera_pos_att[:, 0]) * (self.dist_max - self.dist_min)
+        elevations = self.elev_min + torch.sigmoid(camera_pos_att[:, 1]) * (self.elev_max - self.elev_min)
+
+        azimuths_x = camera_pos_att[:, 2]
+        azimuths_y = camera_pos_att[:, 3]
+        # azimuths = 90.0 - self.atan2(azimuths_y, azimuths_x)
+        azimuths = - self.atan2(azimuths_y, azimuths_x) / 360.0 * self.azi_scope
+
+        camera_pos = camera_position_from_spherical_angles(distances, elevations, azimuths)
+        object_pos = torch.tanh(self.pred_obj_pos_encoder(feat))
+        camera_up = torch.tanh(self.pred_cam_up_encoder(feat))
+
+        cameras = [camera_pos, object_pos, camera_up]
+
+        return cameras
+
+
 class AttributeEncoder(nn.Module):
-    def __init__(self, num_vertices, vertices_init, nc, nf, nk):
+    def __init__(self, num_vertices, vertices_init, nc, nf, nk, azi_scope, elev_range, dist_range, scale=2.):
         super(AttributeEncoder, self).__init__()
         self.num_vertices = num_vertices
         self.vertices_init = vertices_init
+        self.scale = scale
 
-        self.shape_enc = ShapeEncoder(nc=nc, nk=nk, num_vertices=self.num_vertices)
+        self.shape_enc = ShapeEncoder(nc=nc, nk=nk, nf=nf * 2, num_vertices=self.num_vertices,
+                                      vertices_init=vertices_init)
         self.texture_enc = TextureEncoder(nc=nc, nk=nk, nf=nf, num_vertices=self.num_vertices)
-        self.light_enc = LightEncoder(nc=nc, nk=nk)
+        self.light_enc = LightEncoder(nc=nc, nk=nk, nf=nf * 2)
+        self.camera_enc = CameraEncoder(nc=nc, nk=nk, nf=nf, azi_scope=azi_scope, elev_range=elev_range,
+                                        dist_range=dist_range)
 
     def forward(self, x):
         device = x.device
+        batch_size = x.shape[0]
         input_img = x
 
+        # cameras
+        cameras = self.camera_enc(input_img)
+        camera_pos, object_pos, camera_up = cameras
+
         # vertex
-        delta_vertices = self.shape_enc(input_img)
+        delta_vertices = self.shape_enc(input_img) * self.scale
         vertices = self.vertices_init[None].to(device) + delta_vertices
 
         # textures
@@ -242,6 +281,9 @@ class AttributeEncoder(nn.Module):
 
         # others
         attributes = {
+            'pred_camera_pos': camera_pos,
+            'pred_object_pos': object_pos,
+            'pred_camera_up': camera_up,
             'vertices': vertices,
             'delta_vertices': delta_vertices,
             'textures': textures,
