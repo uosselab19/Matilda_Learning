@@ -22,6 +22,7 @@ from PerceptualSimilarity.models import dist_model
 
 ### get_model ###
 def get_predictor_model(template_path, resume_path, image_size):
+    print(resume_path)
     assert os.path.exists(resume_path)
 
     diffRender = DiffRender(filename_obj=template_path, image_size=image_size)
