@@ -73,14 +73,14 @@ predictor_models, mask_model, diffRenderers = get_all_models()
 
 # WAS를 통해 Repository에 파일 저장
 URL = "http://3.133.233.81:8080"
-def save_fileinfo_into_repository(title: str, catCode: str, saveUrl: str, token: str):
+def save_fileinfo_into_repository(title: str, catCode: str, imgUrl: str, objectUrl: str, token: str) -> str:
     memberNum = jwt.decode(token, options={"verify_signature": False})['num']
     body = {
         "title": title,
         "catCode": catCode,
-        "imgUrl": saveUrl + '/thumbImg.jpg',
+        "imgUrl": imgUrl,
         "memberNum": memberNum,
-        "objectUrl": saveUrl
+        "objectUrl": objectUrl
     }
     response = httpx.post(URL + '/items/new', json=body)
     return response.json()
