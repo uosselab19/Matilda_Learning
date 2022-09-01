@@ -94,7 +94,8 @@ def get_fileinfo_from_repository(num: int, token: str) -> str:
 bucketMatilda = boto3.resource('s3').Bucket('matilda.image-storage')
 
 def save_file_into_S3(localfilePath: str, targetfilePath: str):
-
+    print(localfilePath, targetfilePath)
+    print(type(localfilePath), type(targetfilePath))
     bucketMatilda.upload_file(localfilePath, targetfilePath)
 
     return True
