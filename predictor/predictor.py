@@ -379,7 +379,7 @@ class DiffRender(object):
 
         vutils.save_image(image.detach(), img_save_path, normalize=True)
 
-        return
+        return img_save_path
 
     def export_into_glb(self, save_path, category):
         time = Usd.TimeCode.Default()
