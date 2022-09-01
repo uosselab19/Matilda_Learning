@@ -461,6 +461,6 @@ class DiffRender(object):
         scn = a3d.Scene()
         scn.open(usd_path)
         obj_save_path = save_path + 'obj.glb'
-        scn.Save(obj_save_path, a3d.FileFormat.GLTF2_BINARY)
+        scn.save(obj_save_path, a3d.FileFormat.GLTF2_BINARY)
 
         return obj_save_path

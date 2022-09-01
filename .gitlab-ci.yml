@@ -10,12 +10,12 @@ run:
   script:
     - sh ./shellscripts/run.sh
 
-run_pred:
-  tags:
-    - test
-  only:
-    - predictor
-  stage: run
-  script:
-    - sh ./shellscripts/run_pred.sh
+#run_pred:
+#  tags:
+#    - test
+#  only:
+#    - predictor
+#  stage: run
+#  script:
+#    - sh ./shellscripts/run_pred.sh
 
