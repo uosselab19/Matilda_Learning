@@ -22,13 +22,15 @@ from PerceptualSimilarity.models import dist_model
 
 ### get_model ###
 def get_predictor_model(template_path, resume_path, image_size):
-    print(resume_path)
     assert os.path.exists(resume_path)
 
     diffRender = DiffRender(filename_obj=template_path, image_size=image_size)
 
     # netE: 3D attribute encoder: Light, Shape, and Texture
-    netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32)
+    azi_scope = 360
+    elev_range = '-90~90'
+    dist_range = '5~7'
+    netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32, azi_scope=azi_scope, elev_range=elev_range, dist_range=dist_range)
     netE = netE.cuda()
     netE.eval()
 
