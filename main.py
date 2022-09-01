@@ -9,6 +9,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import os
+import shutil
 import httpx
 import jwt
 from fastapi.middleware.cors import CORSMiddleware
@@ -173,7 +174,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     save_file_into_S3(img_save_path, imgPath)
 
     # 로컬 파일 삭제
-    os.remove(save_path)
+    shutil.rmtree(save_path)
 
     # WAS로 saveUrl 전달
     response = save_fileinfo_into_repository(

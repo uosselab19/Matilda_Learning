@@ -10,7 +10,6 @@ configuration = nft_storage.Configuration(
     access_token = os.environ.get('nftStorageAccessToken')
 )
 
-
 def store_NFTStorage(fileData: BytesIO) -> str:
     with nft_storage.ApiClient(configuration) as api_client:
         api_instance = nft_storage_api.NFTStorageAPI(api_client)
