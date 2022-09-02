@@ -114,18 +114,18 @@ def get_file_from_S3(filePath: str) -> io.BytesIO:
 def load_into_tensor_and_resize(data, resolution, mask_model):
     img = Image.open(BytesIO(data)).convert('RGB')
 
-    # W, H = img.size
-    # desired_size = max(W, H)
-    # delta_w = desired_size - W
-    # delta_h = desired_size - H
-    # padding = (delta_w // 2, delta_h // 2, delta_w - (delta_w // 2), delta_h - (delta_h // 2))
-    # img = ImageOps.expand(img, padding)
-    #
-    # img = img.resize((resolution, resolution))
+    W, H = img.size
+    desired_size = max(W, H)
+    delta_w = desired_size - W
+    delta_h = desired_size - H
+    padding = (delta_w // 2, delta_h // 2, delta_w - (delta_w // 2), delta_h - (delta_h // 2))
+    img = ImageOps.expand(img, padding)
 
-    tf = transforms.Compose([transforms.Rescale(resolution),
-                             transforms.CenterCrop(resolution)])
-    img = tf(img)
+    img = img.resize((resolution, resolution))
+
+    # tf = transforms.Compose([transforms.Resize(resolution),
+    #                          transforms.CenterCrop(resolution)])
+    # img = tf(img)
     img = torchvision.transforms.functional.to_tensor(img).cuda()
 
     img_mask = mask.get_mask_from_image(mask_model, img.unsqueeze(0))
