@@ -8,6 +8,7 @@ import time
 import torch
 import torchvision
 import torchvision.transforms as transforms
+import torchvision.utils as vutils
 import os
 import shutil
 import httpx
@@ -148,6 +149,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
         title = title[0:45]
 
     image = load_into_tensor_and_resize(await file.read(),512, mask_model) # image 사이즈 조절 및 tensor로 변환
+    vutils.save_image(image.detach(), './test.png', normalize=True)
 
     predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
     dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
