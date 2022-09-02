@@ -123,7 +123,7 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
     #
     # img = img.resize((resolution, resolution))
 
-    tf = transforms.Compose([transforms.Resize(resolution),
+    tf = transforms.Compose([transforms.Rescale(resolution),
                              transforms.CenterCrop(resolution)])
     img = tf(img)
     img = torchvision.transforms.functional.to_tensor(img).cuda()
