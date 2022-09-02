@@ -50,21 +50,23 @@ def get_all_models():
     predictor_models = {}
     diffRenderers = {}
 
+    origin = "/home/ec2-user/Matilda_Learning"
+
     for category in categories:
         # style_gan
         #style_gan_network_path = f"./style_gan/network/{category}.pkl"
         #style_gan_models[category] = style_gan.get_models(style_gan_network_path)
 
         # predictor
-        predictor_model_path = f'./predictor/network/models/{category}.pth'
-        init_mesh_path = f"./predictor/samples/{samples_per_categories[category]}.obj"
+        predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
+        init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"
         predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size)
         predictor_models[category] = predictor_model
         if samples_per_categories[category] not in diffRenderers:
             diffRenderers[samples_per_categories[category]] = diffRenderer
 
     # mask 모델 불러오기
-    model_path = "./mask/DIS/saved_models/isnet.pth"  ## load trained weights from this path
+    model_path = f"{origin}/mask/DIS/saved_models/isnet.pth"  ## load trained weights from this path
     mask_model = mask.get_mask_model(model_path)
 
     return predictor_models, mask_model, diffRenderers

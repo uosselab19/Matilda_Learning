@@ -17,11 +17,7 @@ else
 fi
 
 origin="/home/ec2-user/Matilda_Learning"
-mkdir ./mask/DIS/saved_models
-mkdir ./predictor/network/models
 cp -r ${origin}/predictor/PerceptualSimilarity ./predictor
-cp ${origin}/predictor/network/models/TOP.pth ./predictor/network/models
-cp ${origin}/mask/DIS/saved_models/isnet.pth ./mask/DIS/saved_models
 cp ${origin}/.env ./.env
 
 echo 'Process start'
