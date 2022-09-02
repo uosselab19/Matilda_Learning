@@ -23,7 +23,7 @@ from predictor import predictor
 
 # start : uvicorn main:app --host 0.0.0.0 --port 8100 --reload &
 app = FastAPI()
- 
+
 origins = [
     "http://localhost:3000",
     "http://3.133.233.81:3000"
