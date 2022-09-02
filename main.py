@@ -97,8 +97,7 @@ def get_fileinfo_from_repository(num: int, token: str) -> str:
 bucketMatilda = boto3.resource('s3').Bucket('matilda.image-storage')
 
 def save_file_into_S3(localfilePath: str, targetfilePath: str):
-    print(localfilePath, targetfilePath)
-    print(type(localfilePath), type(targetfilePath))
+
     bucketMatilda.upload_file(localfilePath, targetfilePath)
 
     return True
@@ -142,7 +141,6 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
         title = title[0:45]
 
     image = load_into_tensor_and_resize(await file.read(),512, mask_model) # image 사이즈 조절 및 tensor로 변환
-    vutils.save_image(image.detach(), './test.png', normalize=True)
 
     predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
     dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
