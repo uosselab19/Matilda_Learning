@@ -22,19 +22,24 @@ def get_mask_from_image(net, im_tensor):
     print("Making Mask...")
     input_size = [1024, 1024]
     im_shp=im_tensor.shape[0:2]
-    im_tensor = F.upsample(im_tensor, input_size, mode="bilinear").type(torch.uint8)
+    im_tensor = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
     image = torch.divide(im_tensor,255.0)
     image = normalize(image,[0.5,0.5,0.5],[1.0,1.0,1.0])
+    print(image.shape)
 
     if torch.cuda.is_available():
         image=image.cuda()
 
-    result = net(image)
-    result = torch.squeeze(F.upsample(result[0][0],im_shp,mode='bilinear'),0)
-    ma = torch.max(result)
-    mi = torch.min(result)
-    result = to_pil_image((result-mi)/(ma-mi))
-    result = result.point(lambda p: p >= 60 and 255)  # 하얀색으로
-    result = torchvision.transforms.functional.to_tensor(result).max(0, True)[0]
+    img_mask = net(image)
+    img_mask = torch.squeeze(F.upsample(img_mask[0][0],im_shp,mode='bilinear'),0)
+    ma = torch.max(img_mask)
+    mi = torch.min(img_mask)
+    img_mask = (img_mask-mi)/(ma-mi)
+    print(img_mask.shape)
 
-    return result
+    img_mask = to_pil_image(img_mask)
+    img_mask = img_mask.point(lambda p: p >= 60 and 255)  # 하얀색으로
+    img_mask = torchvision.transforms.functional.to_tensor(img_mask).max(0, True)[0]
+    print(img_mask.shape)
+
+    return img_mask
