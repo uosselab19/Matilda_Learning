@@ -24,9 +24,7 @@ def get_mask_from_image(net, im_tensor):
     print("Making Mask...")
     input_size = [1024, 1024]
     im_shp=im_tensor.shape[1:3]
-    im_tensor = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
-    image = torch.divide(im_tensor,255.0)
-    image = normalize(image,[0.5,0.5,0.5],[1.0,1.0,1.0])
+    image = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
 
     img_mask = net(image)
     img_mask = torch.squeeze(F.upsample(img_mask[0][0],im_shp,mode='bilinear'),0)
