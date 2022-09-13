@@ -52,7 +52,7 @@ args_per_categories = {
 }
 
 def get_all_models():
-    image_size = 512
+    image_size = 256
 
     predictor_models = {}
     diffRenderers = {}
@@ -141,7 +141,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     if len(title) > 45:
         title = title[0:45]
 
-    image = load_into_tensor_and_resize(await file.read(),512, mask_model) # image 사이즈 조절 및 tensor로 변환
+    image = load_into_tensor_and_resize(await file.read(),256, mask_model) # image 사이즈 조절 및 tensor로 변환
 
     vutils.save_image(image.detach(),'./test.png', normalize=True)
 
@@ -149,7 +149,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
 
     attributes = predictor(image.unsqueeze(0))
-    
+
     # 파일 이름에 사용 할 시간 정보
     now = str(int(datetime.now().timestamp()))
 
