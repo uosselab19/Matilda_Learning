@@ -20,18 +20,17 @@ def get_mask_model(model_path):
 
 def get_mask_from_image(net, im_tensor):
     print("Making Mask...")
-    print(im_tensor.shape)
     input_size = [1024, 1024]
     im_shp=im_tensor.shape[0:2]
-    im_tensor = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
+    im_tensor = F.upsample(im_tensor, input_size, mode="bilinear").type(torch.uint8)
     image = torch.divide(im_tensor,255.0)
     image = normalize(image,[0.5,0.5,0.5],[1.0,1.0,1.0])
 
     if torch.cuda.is_available():
         image=image.cuda()
 
-    result=net(image)
-    result=torch.squeeze(F.upsample(result[0][0],im_shp,mode='bilinear'),0)
+    result = net(image)
+    result = torch.squeeze(F.upsample(result[0][0],im_shp,mode='bilinear'),0)
     ma = torch.max(result)
     mi = torch.min(result)
     result = to_pil_image((result-mi)/(ma-mi))
