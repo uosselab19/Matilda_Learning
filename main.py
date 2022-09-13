@@ -38,6 +38,18 @@ app.add_middleware(
 categories = ['TOP', 'BTM']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
+args_per_categories = {
+    'TOP': {
+        'azi_scope' : 180,
+        'elev_range' : '-30~30',
+        'dist_range' : '5~7'
+    },
+    'BTM': {
+        'azi_scope': 180,
+        'elev_range': '-30~30',
+        'dist_range': '5~7'
+    }
+}
 
 def get_all_models():
     image_size = 512
@@ -52,7 +64,7 @@ def get_all_models():
         # predictor
         predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
         init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"
-        predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size)
+        predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size,args_per_categories[category])
         predictor_models[category] = predictor_model
         if samples_per_categories[category] not in diffRenderers:
             diffRenderers[samples_per_categories[category]] = diffRenderer

@@ -21,15 +21,15 @@ import posixpath
 from PerceptualSimilarity.models import dist_model
 
 ### get_model ###
-def get_predictor_model(template_path, resume_path, image_size):
+def get_predictor_model(template_path, resume_path, image_size, args):
     assert os.path.exists(resume_path)
 
     diffRender = DiffRender(filename_obj=template_path, image_size=image_size)
 
     # netE: 3D attribute encoder: Light, Shape, and Texture
-    azi_scope = 360
-    elev_range = '-90~90'
-    dist_range = '5~7'
+    azi_scope = args['azi_scope']
+    elev_range = args['elev_range']
+    dist_range = args['dist_range']
     netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32, azi_scope=azi_scope, elev_range=elev_range, dist_range=dist_range)
     netE = netE.cuda()
     netE.eval()
@@ -54,45 +54,6 @@ class Timer:
         print(self.msg % (time.time() - self.start_time))
 
 #####################################################################
-# ------------------------- PerceptualLoss ------------------------ #
-#####################################################################
-
-class PerceptualLoss(object):
-    def __init__(self, model='net', net='alex', use_gpu=True):
-        print('Setting up Perceptual loss..')
-        self.model = dist_model.DistModel()
-        self.model.initialize(model=model, net=net, use_gpu=True)
-        print('Done')
-
-    def __call__(self, pred, target, normalize=True):
-        """
-        Pred and target are Variables.
-        If normalize is on, scales images between [-1, 1]
-        Assumes the inputs are in range [0, 1].
-        """
-        if normalize:
-            target = 2 * target - 1
-            pred = 2 * pred - 1
-
-        dist = self.model.forward_pair(target, pred)
-
-        return dist
-
-class PerceptualTextureLoss(object):
-    def __init__(self):
-        self.perceptual_loss = PerceptualLoss()
-
-    def __call__(self, img_pred, img_gt):
-        """
-        Input:
-          img_pred, img_gt: B x 3 x H x W
-        """
-
-        # Only use mask_gt..
-        dist = self.perceptual_loss(img_pred, img_gt)
-        return dist.mean()
-
-#####################################################################
 # ----------------------------- DIB_R ----------------------------- #
 #####################################################################
 
@@ -105,32 +66,13 @@ def recenter_vertices(vertices, vertice_shift):
     return vertices
 
 class DiffRender(object):
-    # Hyperparameters
-    num_epoch = 210
     batch_size = 1
-
-    laplacian_weight = 0.3  # ring -> 0.3 , shirts -> 0.01
-    image_weight = 0.1
-    mask_weight = 1.
-    perceptual_wight = 0.01
-    mov_weight = 0.5
-
-    texture_lr = 3e-2
-    vertice_lr = 5e-2
-    camera_lr = 5e-4
-
-    scheduler_step_size = 40
-    scheduler_gamma = 0.5
-
-    thumb_nail_id = 0
-    test_batch_size = 1
 
     def __init__(self, filename_obj, image_size):
         self.image_size = image_size
         # camera projection matrix
         camera_fovy = np.arctan(1.0 / 2.5) * 2
         self.cam_proj = generate_perspective_projection(camera_fovy, ratio=image_size / image_size)
-        self.texture_loss = PerceptualTextureLoss()
 
         mesh = kal.io.obj.import_mesh(filename_obj, with_materials=True)
 
