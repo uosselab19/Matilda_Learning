@@ -5,6 +5,7 @@ from mask.DIS.models import isnet
 from torchvision.transforms.functional import normalize
 from torchvision.transforms.functional import to_pil_image
 import torchvision
+import numpy as np
 from skimage import io
 
 def get_mask_model(model_path):
