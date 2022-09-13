@@ -121,7 +121,7 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
     img = tf(img)
     img = torchvision.transforms.functional.to_tensor(img).cuda()
     img_mask = mask.get_mask_from_image(mask_model, img)
-
+    vutils.save_image(img_mask.detach(), './test_mask.png', normalize=True)
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
 
     return img
