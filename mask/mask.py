@@ -5,6 +5,7 @@ from mask.DIS.models import isnet
 from torchvision.transforms.functional import normalize
 from torchvision.transforms.functional import to_pil_image
 import torchvision
+from skimage import io
 
 def get_mask_model(model_path):
     print(f"restore model from: {model_path}")
@@ -31,7 +32,7 @@ def get_mask_from_image(net, im_tensor):
     ma = torch.max(img_mask)
     mi = torch.min(img_mask)
     img_mask = (img_mask-mi)/(ma-mi)*255
-
+    io.imsave("./test_mask_ori.png",(img_mask * 255).permute(1, 2, 0).cpu().data.numpy().astype(np.uint8))
     img_mask = to_pil_image(img_mask)
     img_mask = img_mask.point(lambda p: p >= 60 and 255)  # 하얀색으로
     img_mask = torchvision.transforms.functional.to_tensor(img_mask).max(0, True)[0].cuda()
