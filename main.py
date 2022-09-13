@@ -1,15 +1,11 @@
-import os
 from fastapi import FastAPI, File, Form, UploadFile, Header
 from PIL import Image
-from PIL import ImageOps
 from io import BytesIO
 import numpy as np
-import time
 import torch
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
-import os
 import shutil
 import httpx
 import jwt
@@ -39,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-categories = ['TOP']
+categories = ['TOP', 'BTM']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
 
@@ -53,10 +49,6 @@ def get_all_models():
     origin = "/home/ec2-user/Matilda_Learning"
 
     for category in categories:
-        # style_gan
-        #style_gan_network_path = f"./style_gan/network/{category}.pkl"
-        #style_gan_models[category] = style_gan.get_models(style_gan_network_path)
-
         # predictor
         predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
         init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"

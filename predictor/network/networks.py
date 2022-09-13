@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+import torch.nn.functional as F
 
 def net_init(modules):
     for m in modules:
@@ -36,13 +37,14 @@ def camera_position_from_spherical_angles(dist, elev, azim, degrees=True):
     camera_position = torch.stack([x, y, z], dim=1)
     return camera_position.reshape(-1, 3)
 
+
 def deep_copy(att, index=None, detach=False):
     if index is None:
         index = torch.arange(att['textures'].shape[0]).cuda()
 
     copy_att = {}
     for key, value in att.items():
-        copy_keys = ['camera_pos', 'object_pos', 'camera_up', 'vertices', 'delta_vertices', 'textures', 'lights']
+        copy_keys = ['elevations', 'distances', 'azimuths', 'vertices', 'delta_vertices', 'textures', 'lights']
         if key in copy_keys:
             if detach:
                 copy_att[key] = value[index].clone().detach()
@@ -67,6 +69,7 @@ def linearblock(indim, outdim):
         nn.ReLU()
     ]
     return block2
+
 
 class AttBlock(nn.Module):
     def __init__(self, nc, nk, nf, out_dim, method):
@@ -99,7 +102,7 @@ class AttBlock(nn.Module):
         net_init(self.modules())
 
         # Free some memory
-        del all_blocks, block1, block2, block3, \
+        del all_blocks, block1, block2, block3, block4, block5, \
             linear1, linear2
 
     def forward(self, x):
@@ -115,6 +118,7 @@ class AttBlock(nn.Module):
             x = x.view(batch_size, -1, 1, 1)
             x = self.encoder2(x)
         return x
+
 
 class ShapeEncoder(nn.Module):
     def __init__(self, nc, nk, nf, num_vertices, vertices_init=None):
@@ -190,15 +194,18 @@ class TextureEncoder(nn.Module):
             nn.ReLU(True),
             # state size. (nf) x 256 x 256
             nn.Upsample(scale_factor=2),
-            nn.Conv2d(nf, 3, 3, 1, 1, padding_mode='reflect'),
+            nn.Conv2d(nf, 2, 3, 1, 1, padding_mode='reflect'),
             nn.Tanh()
         )
 
     def forward(self, x):
-        x = x[:, :3]
+        img = x[:, :3]
         x = self.enc(x)
-        textures = (self.texture_flow(x) + 1) / 2  # (batch_size, 3, 256, 256)
+        uv_sampler = self.texture_flow(x).permute(0, 2, 3, 1)
+        textures = F.grid_sample(img, uv_sampler)
 
+        textures_flip = textures.flip([2])
+        textures = torch.cat([textures, textures_flip], dim=2)
         return textures
 
 
@@ -217,15 +224,13 @@ class CameraEncoder(nn.Module):
         self.dist_max = float(dist_range[1])
 
         self.pred_cam_pos_encoder = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=4, method='linear')
-        self.pred_obj_pos_encoder = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=3, method='linear')
-        self.pred_cam_up_encoder = AttBlock(nc=nc, nk=nk, nf=nf, out_dim=3, method='linear')
 
     def atan2(self, y, x):
         r = torch.sqrt(x ** 2 + y ** 2 + 1e-12) + 1e-6
         phi = torch.sign(y) * torch.acos(x / r) * 180.0 / math.pi
         return phi
 
-    def forward(self, feat):
+    def forward(self, feat, TYPE):
         camera_pos_att = self.pred_cam_pos_encoder.forward(feat)
 
         # cameras
@@ -234,17 +239,12 @@ class CameraEncoder(nn.Module):
 
         azimuths_x = camera_pos_att[:, 2]
         azimuths_y = camera_pos_att[:, 3]
-        # azimuths = 90.0 - self.atan2(azimuths_y, azimuths_x)
         azimuths = - self.atan2(azimuths_y, azimuths_x) / 360.0 * self.azi_scope
+        azimuths += TYPE
 
-        camera_pos = camera_position_from_spherical_angles(distances, elevations, azimuths)
-        object_pos = torch.tanh(self.pred_obj_pos_encoder(feat))
-        camera_up = torch.tanh(self.pred_cam_up_encoder(feat))
-
-        cameras = [camera_pos, object_pos, camera_up]
+        cameras = [distances, elevations, azimuths]
 
         return cameras
-
 
 class AttributeEncoder(nn.Module):
     def __init__(self, num_vertices, vertices_init, nc, nf, nk, azi_scope, elev_range, dist_range, scale=2.):
@@ -260,14 +260,13 @@ class AttributeEncoder(nn.Module):
         self.camera_enc = CameraEncoder(nc=nc, nk=nk, nf=nf, azi_scope=azi_scope, elev_range=elev_range,
                                         dist_range=dist_range)
 
-    def forward(self, x):
+    def forward(self, x, TYPE):
         device = x.device
         batch_size = x.shape[0]
         input_img = x
 
         # cameras
-        cameras = self.camera_enc(input_img)
-        camera_pos, object_pos, camera_up = cameras
+        distances, elevations, azimuths = self.camera_enc(input_img, TYPE)
 
         # vertex
         delta_vertices = self.shape_enc(input_img) * self.scale
@@ -279,9 +278,9 @@ class AttributeEncoder(nn.Module):
 
         # others
         attributes = {
-            'pred_camera_pos': camera_pos,
-            'pred_object_pos': object_pos,
-            'pred_camera_up': camera_up,
+            'distances': distances,
+            'elevations': elevations,
+            'azimuths': azimuths,
             'vertices': vertices,
             'delta_vertices': delta_vertices,
             'textures': textures,
