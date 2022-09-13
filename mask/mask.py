@@ -30,7 +30,6 @@ def get_mask_from_image(net, im_tensor):
         image=image.cuda()
 
     img_mask = net(image)
-    print(img_mask.shape)
     img_mask = torch.squeeze(F.upsample(img_mask[0][0],im_shp,mode='bilinear'),0)
     ma = torch.max(img_mask)
     mi = torch.min(img_mask)
@@ -39,6 +38,5 @@ def get_mask_from_image(net, im_tensor):
     img_mask = to_pil_image(img_mask)
     img_mask = img_mask.point(lambda p: p >= 60 and 255)  # 하얀색으로
     img_mask = torchvision.transforms.functional.to_tensor(img_mask).max(0, True)[0]
-    print(img_mask.shape)
 
     return img_mask
