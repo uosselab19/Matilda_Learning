@@ -2,6 +2,9 @@ import torch
 import torch.nn.functional as F
 
 from mask.DIS.models import isnet
+from torchvision.transforms.functional import normalize
+from torchvision.transforms.functional import to_pil_image
+import torchvision
 
 def get_mask_model(model_path):
     print(f"restore model from: {model_path}")
@@ -15,20 +18,23 @@ def get_mask_model(model_path):
     net.eval()
     return net
 
-def get_mask_from_image(net, image):
-    # image should be (1, 3, 512, 512)
+def get_mask_from_image(net, im_tensor):
     print("Making Mask...")
-    ds_val = net(image)[0]
+    input_size = [1024, 1024]
+    im_shp=im_tensor.shape[0:2]
+    im_tensor = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
+    image = torch.divide(im_tensor,255.0)
+    image = normalize(image,[0.5,0.5,0.5],[1.0,1.0,1.0])
 
-    pred_val = ds_val[0][0, :, :, :]  # B x 1 x H x W
+    if torch.cuda.is_available():
+        image=image.cuda()
 
-    ## recover the prediction spatial size to the orignal image size
-    pred_val = torch.squeeze(
-        F.upsample(torch.unsqueeze(pred_val, 0), (512, 512), mode='bilinear'))
+    result=net(image)
+    result=torch.squeeze(F.upsample(result[0][0],im_shp,mode='bilinear'),0)
+    ma = torch.max(result)
+    mi = torch.min(result)
+    result = to_pil_image((result-mi)/(ma-mi))
+    result = result.point(lambda p: p >= 60 and 255)  # 하얀색으로
+    result = torchvision.transforms.functional.to_tensor(result).max(0, True)[0]
 
-    # pred_val = normPRED(pred_val)
-    ma = torch.max(pred_val)
-    mi = torch.min(pred_val)
-    pred_val = (pred_val - mi) / (ma - mi)  # max = 1
-
-    return pred_val
+    return result
