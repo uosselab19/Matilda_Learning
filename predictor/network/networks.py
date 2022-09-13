@@ -37,7 +37,6 @@ def camera_position_from_spherical_angles(dist, elev, azim, degrees=True):
     camera_position = torch.stack([x, y, z], dim=1)
     return camera_position.reshape(-1, 3)
 
-
 def deep_copy(att, index=None, detach=False):
     if index is None:
         index = torch.arange(att['textures'].shape[0]).cuda()

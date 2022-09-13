@@ -135,12 +135,9 @@ class DiffRender(object):
         mesh = kal.io.obj.import_mesh(filename_obj, with_materials=True)
 
         # get vertices_init
-        vertices = mesh.vertices.cuda()
+        vertices = mesh.vertices
         vertices.requires_grad = False
-        vertices_max = vertices.max(0, True)[0]
-        vertices_min = vertices.min(0, True)[0]
-        vertices = (vertices - vertices_min) / (vertices_max - vertices_min)
-        vertices_init = vertices * 2.0 - 1.0  # (1, V, 3)
+        vertices_init = vertices.clone().detach() # (V, 3)
 
         # get face_uvs
         faces = mesh.faces.cuda()
@@ -152,52 +149,25 @@ class DiffRender(object):
         self.num_faces = faces.shape[0]
         self.num_vertices = vertices_init.shape[0]
 
-        # flip index
-        vertex_center_flip = vertices_init.clone()
-        vertex_center_flip[:, 2] *= -1
-        self.flip_index = torch.cdist(vertices_init, vertex_center_flip).min(1)[1]
-
-        ## Set up auxiliary laplacian matrix for the laplacian loss
-        vertices_laplacian_matrix = kal.ops.mesh.uniform_laplacian(self.num_vertices, faces)
-
-        # This is the center of the optimized mesh, separating it as a learnable parameter helps the optimization.
-        self.vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
-                                    requires_grad=True)
-
         self.vertices_init = vertices_init
         self.faces = faces
         self.uvs = uvs
         self.face_uvs = face_uvs
         self.face_uvs_idx = face_uvs_idx
-        self.vertices_laplacian_matrix = vertices_laplacian_matrix
 
-    def set_dataloader(self, images, masks, cameras_info):
-        train_data = []
-        for cnt, image, mask, camera_info in enumerate(zip(images, masks, cameras_info)):
-            data = {}
-            data['rgb'] = torch.from_numpy(image)[:, :, :3].float() / 255.
-            data['sementic'] = torch.from_numpy(mask)
-            data['view_num'] = cnt
-            train_data.append(data)
+    def render(self, camera_pos):
 
-        self.dataloader = torch.utils.data.DataLoader(train_data, batch_size=self.batch_size,
-                                                 shuffle=True, pin_memory=True)
-        return
-
-    def render(self, cam_transform):
-
-        device = cam_transform.device
+        device = camera_pos.device
         cam_proj = self.cam_proj.to(device)
         faces = self.faces.to(device)
 
-        # object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
-        # camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float, device=device).repeat(batch_size, 1)
+        object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float).cuda()
+        camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float).cuda()
 
-        ### Prepare mesh data with projection regarding to camera ###
-        vertices_batch = recenter_vertices(self.vertices, self.vertice_shift).to(device)
+        cam_transform = kal.render.camera.generate_transformation_matrix(camera_pos, object_pos, camera_up)
 
         face_vertices_camera, face_vertices_image, face_normals = \
-            prepare_vertices(vertices=vertices_batch.repeat(self.batch_size, 1, 1),
+            prepare_vertices(vertices=self.vertices,
                              faces=faces, camera_proj=cam_proj, camera_transform=cam_transform
                              )
 
@@ -225,139 +195,19 @@ class DiffRender(object):
 
         return render_img, render_silhouttes
 
-    def train(self, camera_info):
-        ## Separate vertices center as a learnable parameter
-        vertices_init = self.vertices_init
-        vertices_init.requires_grad = False
-
-        # This is the center of the optimized mesh, separating it as a learnable parameter helps the optimization.
-        self.vertice_shift = torch.zeros((3,), dtype=torch.float, device='cuda',
-                                    requires_grad=True)
-
-        camera_pos = camera_info[0].cuda()
-        object_pos = camera_info[1].cuda()
-        camera_up = camera_info[2].cuda()
-
-        camera_pos.requires_grad = True
-        object_pos.requires_grad = True
-        camera_up.requires_grad = True
-
-        # Set optimizer and scheduler
-        vertices_optim = torch.optim.Adam(params=[self.vertices, self.vertice_shift],
-                                          lr=self.vertice_lr)
-        texture_optim = torch.optim.Adam(params=[self.textures], lr=self.texture_lr)
-
-        camera_optim = torch.optim.Adam(params=[camera_pos, object_pos, camera_up], lr=self.camera_lr)
-
-        vertices_scheduler = torch.optim.lr_scheduler.StepLR(
-            vertices_optim,
-            step_size=self.scheduler_step_size,
-            gamma=self.scheduler_gamma)
-        texture_scheduler = torch.optim.lr_scheduler.StepLR(
-            texture_optim,
-            step_size=self.scheduler_step_size,
-            gamma=self.scheduler_gamma)
-        camera_scheduler = torch.optim.lr_scheduler.StepLR(
-            camera_optim,
-            step_size=self.scheduler_step_size,
-            gamma=self.scheduler_gamma)
-
-        ## start train
-        for epoch in range(self.num_epoch):
-            for idx, data in enumerate(self.dataloader):
-                vertices_optim.zero_grad()
-                texture_optim.zero_grad()
-                camera_optim.zero_grad()
-
-                gt_imgs = data['rgb'].cuda()
-                gt_masks = data['semantic'].cuda()
-
-                cam_transform = generate_transformation_matrix(camera_pos[data['view_num']], object_pos[data['view_num']], camera_up[data['view_num']])
-
-                pred_imgs, pred_masks = self.render(self.vertices, self.texture_map, cam_transform)
-
-                ### Compute Losses ###
-                # img, mask loss
-                loss = self.calc_img_loss(pred_imgs, pred_masks, gt_imgs, gt_masks.squeeze(1))
-
-                # mesh regularization
-                loss_lap = self.calc_lap_loss()
-                loss_mov = self.calc_mov_loss() / 3.
-
-                total_loss = loss + loss_lap + loss_mov
-                ### Update the mesh ###
-                total_loss.backward()
-
-                vertices_optim.step()
-                texture_optim.step()
-                camera_optim.step()
-
-            vertices_scheduler.step()
-            texture_scheduler.step()
-            camera_scheduler.step()
-
-            print(f"Epoch {epoch} - loss: {float(loss)}")
-
-    def calc_img_loss(self, pred_img, pred_mask, gt_img, gt_mask):
-        loss_image = torch.mean(torch.abs(pred_img - gt_img))
-        loss_mask = kal.metrics.render.mask_iou(pred_mask, gt_mask)
-        loss_perceptual = self.texture_loss(pred_img, gt_img)
-
-        loss_data = self.image_weight * loss_image + self.mask_weight * loss_mask + self.perceptual_wight * loss_perceptual
-        return loss_data
-
-    def calc_mov_loss(self):
-        Na = self.vertices - self.vertices_init
-        Nf = Na.index_select(1, self.flip_index.to(Na.device))
-        Nf[..., 2] *= -1
-
-        loss_norm = (Na - Nf).norm(dim=2).mean()
-        return self.mov_weight * loss_norm
-
-    def calc_lap_loss(self):
-        # laplacian loss
-        delta_vertices = self.vertices - self.vertices_init
-        device = delta_vertices.device
-        nb_vertices = delta_vertices.shape[1]
-
-        vertices_laplacian_matrix = self.vertices_laplacian_matrix.to(device)
-
-        delta_vertices_laplacian = torch.matmul(vertices_laplacian_matrix, delta_vertices)
-        loss_laplacian = torch.mean(delta_vertices_laplacian ** 2) * nb_vertices * 3
-
-        loss_reg = self.laplacian_weight * loss_laplacian
-        return loss_reg
-
-    def save_object_by_train(self, vertices, textures, lights, images, masks, cameras_info, category, save_path):
-        # dataloader 세팅
-        self.set_dataloader(images, masks, cameras_info)
-
-        # vertices, textures 저장
-        self.vertices = vertices
-        self.textures = textures
-        self.lights = lights
-
-        # train
-        self.train()
-
-        self.save_object(self.vertices, self.textures, category, save_path)
-
-        return
-
-    def save_object(self, vertices, textures, lights, category, save_path):
+    def save_object(self, attributes, category, save_path):
         if not os.path.exists(save_path):
             os.makedirs(save_path, exist_ok=True)
 
         # vertices, textures, lights 저장
-        self.vertices = vertices
-        self.textures = textures
-        self.lights = lights
+        self.vertices = attributes['vertices']
+        self.textures = attributes['textures']
+        self.lights = attributes['lights']
 
         # save object
         obj_save_path = self.export_into_glb(save_path, category)
 
-        # For Test
-        cameras_pos = torch.tensor([[0., 0., 6.]], dtype=torch.float).cuda()
+        cameras_pos = networks.camera_position_from_spherical_angles(attributes['distances'],attributes['elevations'],attributes['azimuths'])
         
         # save thumbnail img
         img_save_path = self.save_thumbnail(save_path, cameras_pos)
@@ -366,14 +216,8 @@ class DiffRender(object):
 
     def save_thumbnail(self, save_path, camera_pos):
         img_save_path = save_path + 'img.png'
-        
-        # This is similar to a training iteration (without the loss part)
-        object_pos = torch.tensor([[0., 0., 0.]], dtype=torch.float).cuda()
-        camera_up = torch.tensor([[0., 1., 0.]], dtype=torch.float).cuda()
 
-        cam_transform = kal.render.camera.generate_transformation_matrix(camera_pos, object_pos, camera_up)
-
-        image, mask = self.render(cam_transform)
+        image, mask = self.render(camera_pos)
 
         image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
 

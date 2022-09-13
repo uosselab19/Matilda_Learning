@@ -139,10 +139,6 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
 
     attributes = predictor(image.unsqueeze(0))
     
-    mesh = attributes['vertices']
-    texture = attributes['textures']
-    lights = attributes['lights']
-    
     # 파일 이름에 사용 할 시간 정보
     now = str(int(datetime.now().timestamp()))
 
@@ -150,7 +146,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     save_path = './temp/' + now + '/'
 
     # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.glb) 추출하기
-    obj_save_path, img_save_path = dib_r.save_object(mesh, texture, lights, category, save_path)
+    obj_save_path, img_save_path = dib_r.save_object(attributes, category, save_path)
     
     # 파일이 S3에 저장될 위치
     objPath = 'items/obj/' + category + '/' + now + '_' + title + '.glb'
