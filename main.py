@@ -54,7 +54,6 @@ args_per_categories = {
 def get_all_models():
     image_size = 512
 
-    #style_gan_models = {}
     predictor_models = {}
     diffRenderers = {}
 
@@ -123,7 +122,8 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
     img = torchvision.transforms.functional.to_tensor(img).cuda()
     img_mask = mask.get_mask_from_image(mask_model, img.unsqueeze(0))
 
-    img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
+    print(img_mask.shape)
+    img = img * img_mask + torch.ones_like(img) * (1 - img_mask.unsqueeze(0))
 
     return img
 
