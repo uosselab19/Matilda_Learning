@@ -20,6 +20,7 @@ def get_mask_model(model_path):
 
 def get_mask_from_image(net, im_tensor):
     print("Making Mask...")
+    print(im_tensor.shape)
     input_size = [1024, 1024]
     im_shp=im_tensor.shape[0:2]
     im_tensor = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
