@@ -10,6 +10,7 @@ import os
 import torch
 import time
 import torchvision.utils as vutils
+import trimesh
 
 import aspose.threed as a3d
 from PIL import Image
@@ -32,13 +33,13 @@ def get_predictor_model(template_path, resume_path, image_size, args):
     dist_range = args['dist_range']
     netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32, azi_scope=azi_scope, elev_range=elev_range, dist_range=dist_range)
     netE = netE.cuda()
-    netE.eval()
 
     print("=> loading checkpoint '{}'".format(resume_path))
     # Map model to be loaded to specified single gpu.
     checkpoint = torch.load(resume_path)
     netE.load_state_dict(checkpoint['netE'])
     print("=> loaded checkpoint '{}' (epoch {})".format(resume_path, checkpoint['epoch']))
+    netE.eval()
 
     return netE, diffRender
 
@@ -145,6 +146,9 @@ class DiffRender(object):
         self.vertices = attributes['vertices']
         self.textures = attributes['textures']
         self.lights = attributes['lights']
+
+        tri_mesh = trimesh.Trimesh(self.vertices[0].detach().cpu().numpy(), self.faces.detach().cpu().numpy())
+        tri_mesh.export('./test.obj')
 
         # save object
         obj_save_path = self.export_into_glb(save_path, category)
