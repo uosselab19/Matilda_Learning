@@ -229,7 +229,7 @@ class CameraEncoder(nn.Module):
         phi = torch.sign(y) * torch.acos(x / r) * 180.0 / math.pi
         return phi
 
-    def forward(self, feat, TYPE):
+    def forward(self, feat):
         camera_pos_att = self.pred_cam_pos_encoder.forward(feat)
 
         # cameras
@@ -239,7 +239,6 @@ class CameraEncoder(nn.Module):
         azimuths_x = camera_pos_att[:, 2]
         azimuths_y = camera_pos_att[:, 3]
         azimuths = - self.atan2(azimuths_y, azimuths_x) / 360.0 * self.azi_scope
-        azimuths += TYPE
 
         cameras = [distances, elevations, azimuths]
 
@@ -259,13 +258,12 @@ class AttributeEncoder(nn.Module):
         self.camera_enc = CameraEncoder(nc=nc, nk=nk, nf=nf, azi_scope=azi_scope, elev_range=elev_range,
                                         dist_range=dist_range)
 
-    def forward(self, x, TYPE):
+    def forward(self, x):
         device = x.device
-        batch_size = x.shape[0]
         input_img = x
 
         # cameras
-        distances, elevations, azimuths = self.camera_enc(input_img, TYPE)
+        distances, elevations, azimuths = self.camera_enc(input_img)
 
         # vertex
         delta_vertices = self.shape_enc(input_img) * self.scale
