@@ -48,6 +48,11 @@ args_per_categories = {
         'azi_scope': 180,
         'elev_range': '-30~30',
         'dist_range': '5~7'
+    },
+    'RIN': {
+        'azi_scope': 180,
+        'elev_range': '-30~30',
+        'dist_range': '5~7'
     }
 }
 
