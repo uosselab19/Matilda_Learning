@@ -22,14 +22,17 @@ def get_mask_model(model_path):
 
 def get_mask_from_image(net, im_tensor):
     print("Making Mask...")
-    im_shp=im_tensor.shape[1:3]
-    image = torch.unsqueeze(im_tensor,0)
+    input_size = [1024, 1024]
+    im_shp = im_tensor.shape[1:3]
+    image = F.upsample(torch.unsqueeze(im_tensor,0), input_size, mode="bilinear").type(torch.uint8)
+    image = torch.divide(image,255.0)
+    image = normalize(image,[0.5,0.5,0.5],[1.0,1.0,1.0])
 
     img_mask = net(image)
     img_mask = torch.squeeze(F.upsample(img_mask[0][0],im_shp,mode='bilinear'),0)
     ma = torch.max(img_mask)
     mi = torch.min(img_mask)
-    img_mask = (img_mask-mi)/(ma-mi)
+    img_mask = (img_mask-mi)/(ma-mi) * 255.0
     img_mask = to_pil_image(img_mask)
     img_mask = img_mask.point(lambda p: p >= 60 and 255)  # 하얀색으로
     img_mask = torchvision.transforms.functional.to_tensor(img_mask).max(0, True)[0].cuda()
