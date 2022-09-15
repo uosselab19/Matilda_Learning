@@ -16,6 +16,7 @@ from store_NFTStorage import store_NFTStorage
 import io
 from mask import mask
 from predictor import predictor
+from PIL import ImageOps
 
 # start : uvicorn main:app --host 0.0.0.0 --port 8100 --reload &
 app = FastAPI()
@@ -55,10 +56,9 @@ args_per_categories = {
         'dist_range': '5~7'
     }
 }
+image_size = 256
 
 def get_all_models():
-    image_size = 256
-
     predictor_models = {}
     diffRenderers = {}
 
@@ -121,9 +121,16 @@ def get_file_from_S3(filePath: str) -> io.BytesIO:
 def load_into_tensor_and_resize(data, resolution, mask_model):
     img = Image.open(BytesIO(data)).convert('RGB')
 
-    tf = transforms.Compose([transforms.Resize(resolution),
-                             transforms.CenterCrop(resolution)])
-    img = tf(img)
+    target_height, target_width = resolution, resolution
+    W, H = img.size
+    desired_size = max(W, H)
+    delta_w = desired_size - W
+    delta_h = desired_size - H
+    padding = (delta_w//2, delta_h//2, delta_w-(delta_w//2), delta_h-(delta_h//2))
+    img = ImageOps.expand(img, padding)
+
+    img = img.resize((target_height, target_width))
+
     img = torchvision.transforms.functional.to_tensor(img).cuda()
     img_mask = mask.get_mask_from_image(mask_model, img)
     vutils.save_image(img_mask.detach(), './test_mask.png', normalize=True)
@@ -146,7 +153,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     if len(title) > 45:
         title = title[0:45]
 
-    image = load_into_tensor_and_resize(await file.read(),256, mask_model) # image 사이즈 조절 및 tensor로 변환
+    image = load_into_tensor_and_resize(await file.read(),image_size, mask_model) # image 사이즈 조절 및 tensor로 변환
 
     vutils.save_image(image.detach(),'./test.png', normalize=True)
 
