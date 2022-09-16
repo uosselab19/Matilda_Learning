@@ -155,8 +155,7 @@ class DiffRender(object):
 
         # camera propertis : distances, elevations, azimuths
         distances = attributes['distances']
-        elevations = torch.tensor([30.0]).cuda()
-        print(attributes['elevations'],elevations)
+        elevations = attributes['elevations'] + 20.0
         azimuths = torch.tensor([-20.0]).cuda()
         cameras_pos = networks.camera_position_from_spherical_angles(distances,elevations,azimuths)
         
