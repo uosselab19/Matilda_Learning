@@ -153,7 +153,7 @@ class DiffRender(object):
         # save object
         obj_save_path = self.export_into_glb(save_path, category)
 
-        cameras_pos = networks.camera_position_from_spherical_angles(attributes['distances'],attributes['elevations']+30,attributes['azimuths']-30)
+        cameras_pos = networks.camera_position_from_spherical_angles(attributes['distances'],attributes['elevations']+15,attributes['azimuths']-30)
         
         # save thumbnail img
         img_save_path = self.save_thumbnail(save_path, cameras_pos)
