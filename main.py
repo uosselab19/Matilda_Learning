@@ -144,6 +144,9 @@ async def root():
 
 @app.post("/convert")
 async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUTH_TOKEN: str = Header()):
+    # 파일이 주어졌는지 확인
+    if file is None:
+        return {"message": "file is not found"}
     # 카테고리가 유효한지 확인
     if category not in categories:
         return {"message": "category not found"}
