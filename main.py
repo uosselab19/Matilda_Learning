@@ -46,7 +46,7 @@ args_per_categories = {
         'dist_range' : '5~7'
     },
     'BTM': {
-        'azi_scope': 180,
+        'azi_scope': 360,
         'elev_range': '-30~30',
         'dist_range': '5~7'
     },
