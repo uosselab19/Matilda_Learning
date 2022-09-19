@@ -17,3 +17,6 @@ python-multipart
 jwt
 PyJWT
 httpx
+boto3
+git+https://github.com/nftstorage/python-client.git
+python-dotenv

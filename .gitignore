@@ -307,4 +307,5 @@ cython_debug/
 /mask/test_imgs/*
 /mask/logs/*
 /style_gan/network/*.pkl
-/predictor/network/*.pth
+/predictor/network/models/*.pth
+/mask/IS-NET/saved_models/*.pth
