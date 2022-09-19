@@ -43,17 +43,20 @@ args_per_categories = {
     'TOP': {
         'azi_scope' : 180,
         'elev_range' : '-30~30',
-        'dist_range' : '5~7'
+        'dist_range' : '5~7',
+        'flip_dim' : 2
     },
     'BTM': {
         'azi_scope': 360,
         'elev_range': '-30~30',
-        'dist_range': '5~7'
+        'dist_range': '5~7',
+        'flip_dim' : 2
     },
     'RIN': {
         'azi_scope': 360,
         'elev_range': '-30~30',
-        'dist_range': '6~8'
+        'dist_range': '6~8',
+        'flip_dim' : 3
     }
 }
 image_size = 256
@@ -163,7 +166,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
     dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
 
-    attributes = predictor(image.unsqueeze(0))
+    attributes = predictor(image.unsqueeze(0), args_per_categories[category]['flip_dim'])
 
     # 파일 이름에 사용 할 시간 정보
     now = str(int(datetime.now().timestamp()))
