@@ -36,7 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-categories = ['TOP', 'BTM']
+categories = ['TOP', 'BTM', 'RIN']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
 args_per_categories = {
@@ -51,9 +51,9 @@ args_per_categories = {
         'dist_range': '5~7'
     },
     'RIN': {
-        'azi_scope': 180,
+        'azi_scope': 360,
         'elev_range': '-30~30',
-        'dist_range': '5~7'
+        'dist_range': '6~8'
     }
 }
 image_size = 256
