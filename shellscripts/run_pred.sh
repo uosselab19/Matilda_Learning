@@ -21,4 +21,4 @@ cp -r ${origin}/predictor/PerceptualSimilarity ./predictor
 cp ${origin}/.env ./.env
 
 echo 'Process start'
-#nohup uvicorn main:app --reload --host 0.0.0.0 --port 8100 >> nohup.out 2>&1 &
+nohup uvicorn main:app --reload --host 0.0.0.0 --port 8100 >> nohup.out 2>&1 &
