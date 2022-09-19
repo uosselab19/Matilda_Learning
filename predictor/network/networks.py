@@ -236,8 +236,7 @@ class AttributeEncoder(nn.Module):
         self.vertices_init = vertices_init
         self.scale = scale
 
-        self.shape_enc = ShapeEncoder(nc=nc, nk=nk, nf=nf * 2, num_vertices=self.num_vertices,
-                                      vertices_init=vertices_init)
+        self.shape_enc = ShapeEncoder(nc=nc, nk=nk, nf=nf * 2, num_vertices=self.num_vertices)
         self.texture_enc = TextureEncoder(nc=nc, nk=nk, nf=nf, num_vertices=self.num_vertices)
         self.light_enc = LightEncoder(nc=nc, nk=nk, nf=nf * 2)
         self.camera_enc = CameraEncoder(nc=nc, nk=nk, nf=nf, azi_scope=azi_scope, elev_range=elev_range,
