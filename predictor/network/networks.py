@@ -37,21 +37,6 @@ def camera_position_from_spherical_angles(dist, elev, azim, degrees=True):
     camera_position = torch.stack([x, y, z], dim=1)
     return camera_position.reshape(-1, 3)
 
-def deep_copy(att, index=None, detach=False):
-    if index is None:
-        index = torch.arange(att['textures'].shape[0]).cuda()
-
-    copy_att = {}
-    for key, value in att.items():
-        copy_keys = ['elevations', 'distances', 'azimuths', 'vertices', 'delta_vertices', 'textures', 'lights']
-        if key in copy_keys:
-            if detach:
-                copy_att[key] = value[index].clone().detach()
-            else:
-                copy_att[key] = value[index].clone()
-    return copy_att
-
-
 def convblock(indim, outdim, ker, stride, pad):
     block2 = [
         nn.Conv2d(indim, outdim, ker, stride, pad),
@@ -120,7 +105,7 @@ class AttBlock(nn.Module):
 
 
 class ShapeEncoder(nn.Module):
-    def __init__(self, nc, nk, nf, num_vertices, vertices_init=None):
+    def __init__(self, nc, nk, nf, num_vertices):
         super(ShapeEncoder, self).__init__()
         self.num_vertices = num_vertices
 
@@ -197,14 +182,14 @@ class TextureEncoder(nn.Module):
             nn.Tanh()
         )
 
-    def forward(self, x):
+    def forward(self, x, flip_dim):
         img = x[:, :3]
         x = self.enc(x)
         uv_sampler = self.texture_flow(x).permute(0, 2, 3, 1)
         textures = F.grid_sample(img, uv_sampler)
 
-        textures_flip = textures.flip([2])
-        textures = torch.cat([textures, textures_flip], dim=2)
+        textures_flip = textures.flip([flip_dim])
+        textures = torch.cat([textures, textures_flip], dim=flip_dim)
         return textures
 
 
@@ -258,7 +243,7 @@ class AttributeEncoder(nn.Module):
         self.camera_enc = CameraEncoder(nc=nc, nk=nk, nf=nf, azi_scope=azi_scope, elev_range=elev_range,
                                         dist_range=dist_range)
 
-    def forward(self, x):
+    def forward(self, x, flip_dim=2):
         device = x.device
         input_img = x
 
@@ -270,7 +255,7 @@ class AttributeEncoder(nn.Module):
         vertices = self.vertices_init[None].to(device) + delta_vertices
 
         # textures
-        textures = self.texture_enc(input_img)
+        textures = self.texture_enc(input_img,flip_dim)
         lights = self.light_enc(input_img)
 
         # others
