@@ -17,7 +17,6 @@ else
 fi
 
 origin="/home/ec2-user/Matilda_Learning"
-cp -r ${origin}/predictor/PerceptualSimilarity ./predictor
 cp ${origin}/.env ./.env
 
 echo 'Process start'

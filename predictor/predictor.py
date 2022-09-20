@@ -1,4 +1,4 @@
-from network import networks
+from predictor.network import networks
 # import kaolin related
 import kaolin as kal
 from kaolin.render.camera import generate_perspective_projection, generate_transformation_matrix
@@ -17,9 +17,6 @@ from PIL import Image
 import numpy as np
 
 from pxr import Gf, Kind, Sdf, Usd, UsdGeom, UsdShade, Vt
-import posixpath
-
-from PerceptualSimilarity.models import dist_model
 
 ### get_model ###
 def get_predictor_model(template_path, resume_path, image_size, args):
@@ -57,14 +54,6 @@ class Timer:
 #####################################################################
 # ----------------------------- DIB_R ----------------------------- #
 #####################################################################
-
-def recenter_vertices(vertices, vertice_shift):
-    """Recenter vertices on vertice_shift for better optimization"""
-    vertices_min = vertices.min(dim=1, keepdim=True)[0]
-    vertices_max = vertices.max(dim=1, keepdim=True)[0]
-    vertices_mid = (vertices_min + vertices_max) / 2
-    vertices = vertices - vertices_mid + vertice_shift
-    return vertices
 
 class DiffRender(object):
     batch_size = 1

@@ -4,7 +4,6 @@ from io import BytesIO
 import numpy as np
 import torch
 import torchvision
-import torchvision.transforms as transforms
 import torchvision.utils as vutils
 import shutil
 import httpx
@@ -18,7 +17,7 @@ from mask import mask
 from predictor import predictor
 from PIL import ImageOps
 
-# start : uvicorn main:app --host 0.0.0.0 --port 8100 --reload &
+# start : uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 app = FastAPI()
 
 origins = [
@@ -65,7 +64,8 @@ def get_all_models():
     predictor_models = {}
     diffRenderers = {}
 
-    origin = "/home/ec2-user/Matilda_Learning"
+    #origin = "/home/ec2-user/Matilda_Learning"
+    origin = "."
 
     for category in categories:
         # predictor
@@ -194,6 +194,63 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
 
     return response
 
+
+@app.post("/convert/twoimg")
+async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile = File(...), category: str = Form(...), X_AUTH_TOKEN: str = Header()):
+    # 파일이 주어졌는지 확인
+    if file1 is None or file2 is None:
+        return {"message": "file is not found"}
+    # 카테고리가 유효한지 확인
+    if category not in categories:
+        return {"message": "category not found"}
+
+    # 파일 이름 추출
+    title = '.'.join(file1.filename.split('.')[:-1])
+    if len(title) > 45:
+        title = title[0:45]
+
+    image1 = load_into_tensor_and_resize(await file1.read(), image_size, mask_model)  # image 사이즈 조절 및 tensor로 변환
+    image2 = load_into_tensor_and_resize(await file2.read(), image_size, mask_model)  # image 사이즈 조절 및 tensor로 변환
+    images = torch.cat(image1.unsqueeze(0),image2.unsqueeze(0), dim=0)
+
+    predictor = predictor_models[category]  # category에 해당하는 3D 속성 예측 모델 불러오기
+    dib_r = diffRenderers[samples_per_categories[category]]  # category에 해당하는 3D Renderer 불러오기
+
+    attributes = predictor(images, args_per_categories[category]['flip_dim'])
+
+    attributes['vertices'] =  attributes['vertices'][0].unsqueeze(0)
+    attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
+    attributes['textures'] = torch.cat(attributes['textures'][1][:,image_size:], \
+                                       attributes['textures'][0][:,image_size:], dim=1).unsqueeze(0)
+    attributes['distances'] = attributes['distances'][0].unsqueeze(0)
+    attributes['elevations'] = attributes['elevations'][0].unsqueeze(0)
+    attributes['azimuths'] = attributes['azimuths'][0].unsqueeze(0)
+
+    # 파일 이름에 사용 할 시간 정보
+    now = str(int(datetime.now().timestamp()))
+
+    # 파일이 로컬에 임시로 저장될 위치
+    save_path = './temp/' + now + '/'
+
+    # 3D Object 생성 - 생성된 mesh, texture, lights를 통해 3D 파일(.glb) 추출하기
+    obj_save_path, img_save_path = dib_r.save_object(attributes, category, save_path)
+
+    # 파일이 S3에 저장될 위치
+    objPath = 'items/obj/' + category + '/' + now + '_' + title + '.glb'
+    imgPath = 'items/img/' + category + '/' + now + '_' + title + '.jpg'
+
+    # S3에 파일 저장
+    save_file_into_S3(obj_save_path, objPath)
+    save_file_into_S3(img_save_path, imgPath)
+
+    # 로컬 파일 삭제
+    shutil.rmtree(save_path)
+
+    # WAS로 saveUrl 전달
+    response = save_fileinfo_into_repository(
+        title, category, imgPath, objPath, X_AUTH_TOKEN)
+
+    return response
 
 @app.post("/getCID")
 async def getCID(num: int = Form(...), X_AUTH_TOKEN: str = Header()):
