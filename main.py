@@ -64,8 +64,8 @@ def get_all_models():
     predictor_models = {}
     diffRenderers = {}
 
-    #origin = "/home/ec2-user/Matilda_Learning"
-    origin = "."
+    origin = "/home/ec2-user/Matilda_Learning"
+    #origin = "."
 
     for category in categories:
         # predictor
