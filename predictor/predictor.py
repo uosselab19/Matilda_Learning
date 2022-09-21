@@ -136,9 +136,6 @@ class DiffRender(object):
         self.textures = attributes['textures']
         self.lights = attributes['lights']
 
-        tri_mesh = trimesh.Trimesh(self.vertices[0].detach().cpu().numpy(), self.faces.detach().cpu().numpy())
-        tri_mesh.export('./test.obj')
-
         # save object
         obj_save_path = self.export_into_glb(save_path, category)
 
