@@ -136,7 +136,6 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
 
     img = torchvision.transforms.functional.to_tensor(img).cuda()
     img_mask = mask.get_mask_from_image(mask_model, img)
-    vutils.save_image(img_mask.detach(), './test_mask.png', normalize=True)
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
 
     return img
@@ -160,8 +159,6 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
         title = title[0:45]
 
     image = load_into_tensor_and_resize(await file.read(),image_size, mask_model) # image 사이즈 조절 및 tensor로 변환
-
-    vutils.save_image(image.detach(),'./test.png', normalize=True)
 
     predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
     dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
@@ -211,7 +208,7 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
 
     image1 = load_into_tensor_and_resize(await file1.read(), image_size, mask_model)  # image 사이즈 조절 및 tensor로 변환
     image2 = load_into_tensor_and_resize(await file2.read(), image_size, mask_model)  # image 사이즈 조절 및 tensor로 변환
-    images = torch.cat(image1.unsqueeze(0),image2.unsqueeze(0), dim=0)
+    images = torch.cat([image1.unsqueeze(0),image2.unsqueeze(0)], dim=0)
 
     predictor = predictor_models[category]  # category에 해당하는 3D 속성 예측 모델 불러오기
     dib_r = diffRenderers[samples_per_categories[category]]  # category에 해당하는 3D Renderer 불러오기
@@ -219,9 +216,18 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
     attributes = predictor(images, args_per_categories[category]['flip_dim'])
 
     attributes['vertices'] =  attributes['vertices'].mean(0).unsqueeze(0)
-    attributes['lights'] =  attributes['lights'].mean(0).unsqueeze(0)
-    attributes['textures'] = torch.cat(attributes['textures'][1][:,:image_size], \
-                                       attributes['textures'][0][:,image_size:], dim=1).unsqueeze(0)
+    attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
+    tex_front = attributes['textures'][0]
+
+    # 앞,뒤 자연스럽게 이어지는 텍스처 생성
+    tex_back = attributes['textures'][1].flip([2])
+    textures = torch.cat([tex_front[:,:image_size], tex_back[:,image_size:]], dim=1)
+    smmoth_len = 32
+    for i in range(smmoth_len):
+        idx = image_size+i
+        alpha = i/smmoth_len
+        textures[:,idx] = tex_front[:,idx]*(1-alpha) + tex_back[:,idx] * alpha
+    attributes['textures'] = textures.unsqueeze(0)
     attributes['distances'] = attributes['distances'][0].unsqueeze(0)
     attributes['elevations'] = attributes['elevations'][0].unsqueeze(0)
     attributes['azimuths'] = attributes['azimuths'][0].unsqueeze(0)
