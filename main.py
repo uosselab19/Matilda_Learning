@@ -217,8 +217,14 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
 
     attributes['vertices'] =  attributes['vertices'].mean(0).unsqueeze(0)
     attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
-    attributes['textures'] = torch.cat([attributes['textures'][0][:,:(image_size)], \
-                                       attributes['textures'][1][:,(image_size):].flip([2])], dim=1).unsqueeze(0)
+    textures = torch.cat([attributes['textures'][0][:,:(image_size)], \
+                                       attributes['textures'][1][:,(image_size):].flip([2])], dim=1)
+    smmoth_len = 32.0
+    for i in range(1,smmoth_len):
+        idx = image_size+i
+        alpha = i/smmoth_len
+        textures[:,idx] = attributes['textures'][0][:,idx]*(1-alpha) + attributes['textures'][1][:,idx] * alpha
+    attributes['textures'] = textures.unsqueeze(0)
     attributes['distances'] = attributes['distances'][0].unsqueeze(0)
     attributes['elevations'] = attributes['elevations'][0].unsqueeze(0)
     attributes['azimuths'] = attributes['azimuths'][0].unsqueeze(0)
