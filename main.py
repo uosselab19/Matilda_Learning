@@ -218,6 +218,8 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
     attributes['vertices'] =  attributes['vertices'].mean(0).unsqueeze(0)
     attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
     tex_front = attributes['textures'][0]
+
+    # 앞,뒤 자연스럽게 이어지는 텍스처 생성
     tex_back = attributes['textures'][1].flip([2])
     textures = torch.cat([tex_front[:,:image_size], tex_back[:,image_size:]], dim=1)
     smmoth_len = 32
