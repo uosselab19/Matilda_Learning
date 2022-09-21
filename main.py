@@ -221,7 +221,7 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
     tex_back = attributes['textures'][1].flip([2])
     textures = torch.cat([tex_front[:,:image_size], tex_back[:,image_size:]], dim=1)
     smmoth_len = 32
-    for i in range(1,smmoth_len):
+    for i in range(smmoth_len):
         idx = image_size+i
         alpha = i/smmoth_len
         textures[:,idx] = tex_front[:,idx]*(1-alpha) + tex_back[:,idx] * alpha
