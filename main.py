@@ -35,55 +35,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#####################################################################
+# ---------------------------- Configs ---------------------------- #
+#####################################################################
+
 categories = ['TOP', 'BTM', 'RIN']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
 args_per_categories = {
     'TOP': {
-        'azi_scope' : 180,
-        'elev_range' : '-30~30',
+        'azi_scope' : 360,
+        'elev_range' : '0~30',
         'dist_range' : '5~7',
         'flip_dim' : 2
     },
     'BTM': {
         'azi_scope': 360,
-        'elev_range': '-30~30',
+        'elev_range': '0~30',
         'dist_range': '5~7',
         'flip_dim' : 2
     },
     'RIN': {
         'azi_scope': 360,
-        'elev_range': '-30~30',
-        'dist_range': '6~8',
+        'elev_range': '0~30',
+        'dist_range': '4~7',
         'flip_dim' : 3
     }
 }
 image_size = 256
+predictor_models = {}
+diffRenderers = {}
 
-def get_all_models():
-    predictor_models = {}
-    diffRenderers = {}
+origin = "/home/ec2-user/Matilda_Learning"
 
-    origin = "/home/ec2-user/Matilda_Learning"
-    #origin = "."
+# 카테고리별 예측 모델 불러오기
+for category in categories:
+    # predictor
+    predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
+    init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"
+    predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size,args_per_categories[category])
+    predictor_models[category] = predictor_model
+    if samples_per_categories[category] not in diffRenderers:
+        diffRenderers[samples_per_categories[category]] = diffRenderer
 
-    for category in categories:
-        # predictor
-        predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
-        init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"
-        predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size,args_per_categories[category])
-        predictor_models[category] = predictor_model
-        if samples_per_categories[category] not in diffRenderers:
-            diffRenderers[samples_per_categories[category]] = diffRenderer
+# mask 모델 불러오기
+model_path = f"{origin}/mask/DIS/saved_models/isnet.pth"  ## load trained weights from this path
+mask_model = mask.get_mask_model(model_path)
 
-    # mask 모델 불러오기
-    model_path = f"{origin}/mask/DIS/saved_models/isnet.pth"  ## load trained weights from this path
-    mask_model = mask.get_mask_model(model_path)
-
-    return predictor_models, mask_model, diffRenderers
-
-''' 모델 및 카메라 정보 가져오기'''
-predictor_models, mask_model, diffRenderers = get_all_models()
+#####################################################################
+# ----------------------------- Utils ----------------------------- #
+#####################################################################
 
 # WAS를 통해 Repository에 파일 저장
 URL = "http://3.133.233.81:8080"
@@ -139,6 +140,10 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
     img = img * img_mask + torch.ones_like(img) * (1 - img_mask)
 
     return img
+
+#####################################################################
+# ----------------------------- APIs ------------------------------ #
+#####################################################################
 
 @app.get("/")
 async def root():
@@ -215,7 +220,8 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
 
     attributes = predictor(images, args_per_categories[category]['flip_dim'])
 
-    attributes['vertices'] =  attributes['vertices'].mean(0).unsqueeze(0)
+    vert_alpha = 0.7
+    attributes['vertices'] = (attributes['vertices'][0] * vert_alpha + attributes['vertices'][1] * (1-vert_alpha)).unsqueeze(0)
     attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
     tex_front = attributes['textures'][0]
 
