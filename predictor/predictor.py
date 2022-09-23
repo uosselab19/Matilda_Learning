@@ -141,8 +141,8 @@ class DiffRender(object):
 
         # camera propertis : distances, elevations, azimuths
         distances = attributes['distances']
-        elevations = attributes['elevations'] # + 20.0
-        azimuths = attributes['azimuths'] # + 15.0
+        elevations = attributes['elevations'] + 10.0
+        azimuths = attributes['azimuths'] + 20.0
         cameras_pos = networks.camera_position_from_spherical_angles(distances,elevations,azimuths)
         
         # save thumbnail img
