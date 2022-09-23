@@ -170,6 +170,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
 
     attributes = predictor(image.unsqueeze(0), args_per_categories[category]['flip_dim'])
 
+    vutils.save_image(image.detach(), f'{origin}/test_img.png', normalize=True)
     vutils.save_image(attributes['textures'].detach(),f'{origin}/test_texture.png', normalize=True)
 
     # 파일 이름에 사용 할 시간 정보
