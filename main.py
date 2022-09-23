@@ -170,8 +170,8 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
 
     attributes = predictor(image.unsqueeze(0), args_per_categories[category]['flip_dim'])
 
-    vutils.save_image(image.detach(), f'{origin}/test_img.png', normalize=True)
-    vutils.save_image(attributes['textures'].detach(),f'{origin}/test_texture.png', normalize=True)
+    # vutils.save_image(image.detach(), f'{origin}/test_img.png', normalize=True)
+    # vutils.save_image(attributes['textures'].detach(),f'{origin}/test_texture.png', normalize=True)
 
     # 파일 이름에 사용 할 시간 정보
     now = str(int(datetime.now().timestamp()))
@@ -223,8 +223,7 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
 
     attributes = predictor(images, args_per_categories[category]['flip_dim'])
 
-    vert_alpha = 0.7
-    attributes['vertices'] = (attributes['vertices'][0] * vert_alpha + attributes['vertices'][1] * (1-vert_alpha)).unsqueeze(0)
+    attributes['vertices'] = attributes['vertices'][0].unsqueeze(0)
     attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
     tex_front = attributes['textures'][0]
 
