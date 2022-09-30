@@ -28,7 +28,9 @@ def get_predictor_model(template_path, resume_path, image_size, args):
     azi_scope = args['azi_scope']
     elev_range = args['elev_range']
     dist_range = args['dist_range']
-    netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, nc=3, nk=5, nf=32, azi_scope=azi_scope, elev_range=elev_range, dist_range=dist_range)
+    scale = args['scale']
+    netE = networks.AttributeEncoder(num_vertices=diffRender.num_vertices, vertices_init=diffRender.vertices_init, \
+                                     nc=3, nk=5, nf=32, azi_scope=azi_scope, elev_range=elev_range, dist_range=dist_range, scale=scale)
     netE = netE.cuda()
 
     print("=> loading checkpoint '{}'".format(resume_path))
@@ -39,17 +41,6 @@ def get_predictor_model(template_path, resume_path, image_size, args):
     netE.eval()
 
     return netE, diffRender
-
-class Timer:
-    def __init__(self, msg):
-        self.msg = msg
-        self.start_time = None
-
-    def __enter__(self):
-        self.start_time = time.time()
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        print(self.msg % (time.time() - self.start_time))
 
 #####################################################################
 # ----------------------------- DIB_R ----------------------------- #

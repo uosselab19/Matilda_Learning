@@ -41,25 +41,28 @@ app.add_middleware(
 
 categories = ['TOP', 'BTM', 'RIN']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
-samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus'}
+samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
 args_per_categories = {
     'TOP': {
         'azi_scope' : 360,
         'elev_range' : '0~30',
         'dist_range' : '5~7',
-        'flip_dim' : 2
+        'flip_dim' : 2,
+        'scale' : 1.0
     },
     'BTM': {
         'azi_scope': 360,
         'elev_range': '-30~30',
         'dist_range': '5~7',
-        'flip_dim' : 2
+        'flip_dim' : 2,
+        'scale' : 2.0
     },
     'RIN': {
         'azi_scope': 360,
-        'elev_range': '0~30',
-        'dist_range': '4~7',
-        'flip_dim' : 3
+        'elev_range': '0~60',
+        'dist_range': '5~7',
+        'flip_dim' : 3,
+        'scale' : 2.0
     }
 }
 image_size = 256
@@ -225,9 +228,9 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
 
     attributes['vertices'] = attributes['vertices'][0].unsqueeze(0)
     attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
-    tex_front = attributes['textures'][0]
 
     # 앞,뒤 자연스럽게 이어지는 텍스처 생성
+    tex_front = attributes['textures'][0]
     tex_back = attributes['textures'][1].flip([2])
     textures = torch.cat([tex_front[:,:image_size], tex_back[:,image_size:]], dim=1)
     smmoth_len = 32
