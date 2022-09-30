@@ -61,7 +61,7 @@ args_per_categories = {
         'azi_scope': 360,
         'elev_range': '0~60',
         'dist_range': '5~7',
-        'flip_dim' : 3,
+        'flip_dim' : 2,
         'scale' : 2.0
     }
 }
@@ -197,10 +197,10 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     shutil.rmtree(save_path)
 
     # WAS로 saveUrl 전달
-    response = save_fileinfo_into_repository(
-        title, category, imgPath, objPath, X_AUTH_TOKEN)
+    # response = save_fileinfo_into_repository(
+    #     title, category, imgPath, objPath, X_AUTH_TOKEN)
 
-    return response
+    return "response"
 
 
 @app.post("/convert/twoimg")
