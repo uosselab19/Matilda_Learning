@@ -48,7 +48,7 @@ args_per_categories = {
         'elev_range' : '0~30',
         'dist_range' : '5~7',
         'flip_dim' : 2,
-        'scale' : 1.0
+        'scale' : 2.0
     },
     'BTM': {
         'azi_scope': 360,
