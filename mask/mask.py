@@ -36,7 +36,4 @@ def get_mask_from_image(net, im_tensor):
     img_mask = img_mask.point(lambda p: p >= 60 and 255)  # 하얀색으로
     img_mask = torchvision.transforms.functional.to_tensor(img_mask).max(0, True)[0]
 
-    test_mask = to_pil_image(img_mask.detach().cpu())
-    test_mask.save('./test_mask.png', 'PNG')
-
     return img_mask

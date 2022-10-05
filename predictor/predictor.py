@@ -131,15 +131,15 @@ class DiffRender(object):
         # save object
         obj_save_path = self.export_into_glb(save_path, category)
 
-        tri_mesh = trimesh.Trimesh(self.vertices[0].detach().cpu().numpy(), self.faces.detach().cpu().numpy())
-        texure_maps = to_pil_image(self.textures[0].detach().cpu())
-        texure_maps.save('./test_texture.png', 'PNG')
-        tri_mesh.export('./test.obj')
+        # tri_mesh = trimesh.Trimesh(self.vertices[0].detach().cpu().numpy(), self.faces.detach().cpu().numpy())
+        # texure_maps = to_pil_image(self.textures[0].detach().cpu())
+        # texure_maps.save('./test_texture.png', 'PNG')
+        # tri_mesh.export('./test.obj')
 
         # camera propertis : distances, elevations, azimuths
         distances = attributes['distances']
-        elevations = attributes['elevations'] #+ 10.0
-        azimuths = attributes['azimuths'] # + 20.0
+        elevations = attributes['elevations'] + 10.0
+        azimuths = attributes['azimuths'] + 30.0
         cameras_pos = networks.camera_position_from_spherical_angles(distances,elevations,azimuths)
         
         # save thumbnail img
@@ -153,6 +153,9 @@ class DiffRender(object):
         image, mask = self.render(camera_pos)
 
         image = (torch.clamp(image * mask, 0., 1.) + torch.ones_like(image) * (1 - mask)) * 255
+
+        test_mask = to_pil_image(mask.detach().cpu())
+        test_mask.save('./test_mask.png', 'PNG')
 
         vutils.save_image(image.detach(), img_save_path, normalize=True)
 
