@@ -39,33 +39,43 @@ app.add_middleware(
 # ---------------------------- Configs ---------------------------- #
 #####################################################################
 
-categories = ['TOP', 'BTM', 'RIN']
+categories = ['TOP', 'BTM', 'RIN', 'DRE']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
-samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
+samples_per_categories = {'DRE': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
 args_per_categories = {
     'TOP': {
         'azi_scope' : 360,
         'elev_range' : '0~30',
         'dist_range' : '5~7',
         'flip_dim' : 2,
-        'scale' : 2.0
+        'scale' : 2.0,
+        'image_size' : 256
     },
     'BTM': {
         'azi_scope': 360,
         'elev_range': '-30~30',
         'dist_range': '5~7',
         'flip_dim' : 2,
-        'scale' : 2.0
+        'scale' : 2.0,
+        'image_size' : 256
     },
     'RIN': {
         'azi_scope': 360,
         'elev_range': '0~60',
         'dist_range': '5~7',
         'flip_dim' : 2,
-        'scale' : 2.0
+        'scale' : 2.0,
+        'image_size' : 256
+    },
+    'DRE': {
+        'azi_scope': 360,
+        'elev_range': '0~30',
+        'dist_range': '4~7',
+        'flip_dim' : 2,
+        'scale' : 2.0,
+        'image_size' : 128
     }
 }
-image_size = 256
 predictor_models = {}
 diffRenderers = {}
 
@@ -76,7 +86,7 @@ for category in categories:
     # predictor
     predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
     init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"
-    predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,image_size,args_per_categories[category])
+    predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,args_per_categories[category])
     predictor_models[category] = predictor_model
     if samples_per_categories[category] not in diffRenderers:
         diffRenderers[samples_per_categories[category]] = diffRenderer
@@ -166,7 +176,7 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     if len(title) > 45:
         title = title[0:45]
 
-    image = load_into_tensor_and_resize(await file.read(),image_size, mask_model) # image 사이즈 조절 및 tensor로 변환
+    image = load_into_tensor_and_resize(await file.read(),args_per_categories[category]['image_size'], mask_model) # image 사이즈 조절 및 tensor로 변환
 
     predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
     dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기

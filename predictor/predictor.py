@@ -20,9 +20,9 @@ import numpy as np
 from pxr import Gf, Kind, Sdf, Usd, UsdGeom, UsdShade, Vt
 
 ### get_model ###
-def get_predictor_model(template_path, resume_path, image_size, args):
+def get_predictor_model(template_path, resume_path, args):
     assert os.path.exists(resume_path)
-
+    image_size = args['image_size']
     diffRender = DiffRender(filename_obj=template_path, image_size=image_size)
 
     # netE: 3D attribute encoder: Light, Shape, and Texture
@@ -131,7 +131,7 @@ class DiffRender(object):
         # save object
         obj_save_path = self.export_into_glb(save_path, category)
 
-        # tri_mesh = trimesh.Trimesh(self.vertices[0].detach().cpu().numpy(), self.faces.detach().cpu().numpy())
+        # tri_mesh = trimesh.Trimesh(self.vertices[0].detach().cpu ().numpy(), self.faces.detach().cpu().numpy())
         # texure_maps = to_pil_image(self.textures[0].detach().cpu())
         # texure_maps.save('./test_texture.png', 'PNG')
         # tri_mesh.export('./test.obj')
