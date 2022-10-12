@@ -41,7 +41,7 @@ app.add_middleware(
 
 categories = ['TOP', 'BTM', 'RIN', 'DRE']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
-samples_per_categories = {'DRE': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
+samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
 args_per_categories = {
     'TOP': {
         'azi_scope' : 360,
@@ -67,7 +67,7 @@ args_per_categories = {
         'scale' : 2.0,
         'image_size' : 256
     },
-    'DRE': {
+    'DR': {
         'azi_scope': 360,
         'elev_range': '0~30',
         'dist_range': '4~7',
