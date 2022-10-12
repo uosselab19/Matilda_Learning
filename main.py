@@ -39,7 +39,7 @@ app.add_middleware(
 # ---------------------------- Configs ---------------------------- #
 #####################################################################
 
-categories = ['TOP', 'BTM', 'RIN', 'DRE']
+categories = ['TOP', 'BTM', 'RIN', 'DR']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
 args_per_categories = {
