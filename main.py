@@ -22,9 +22,8 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
-    "http://3.133.233.81:3000"
-    "https://localhost:3000",
-    "https://3.133.233.81:3000"
+    "http://3.133.233.81:3000",
+    "http://www.matilda-hanium.click:3000"
 ]
 
 app.add_middleware(
@@ -108,7 +107,7 @@ mask_model = mask.get_mask_model(model_path)
 #####################################################################
 
 # WAS를 통해 Repository에 파일 저장
-URL = "http://3.133.233.81:8080"
+URL = "http://www.matilda-hanium.click:8080"
 def save_fileinfo_into_repository(title: str, catCode: str, imgUrl: str, objectUrl: str, token: str) -> str:
     memberNum = jwt.decode(token, options={"verify_signature": False})['num']
     body = {
