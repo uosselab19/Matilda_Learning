@@ -74,6 +74,14 @@ args_per_categories = {
         'flip_dim' : 2,
         'scale' : 2.0,
         'image_size' : 128
+    },
+    'HAT': {
+        'azi_scope': 360,
+        'elev_range': '-10~70',
+        'dist_range': '3~6',
+        'flip_dim': 3,
+        'scale': 2.0,
+        'image_size': 128
     }
 }
 predictor_models = {}
