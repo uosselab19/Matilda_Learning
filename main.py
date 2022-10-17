@@ -39,9 +39,9 @@ app.add_middleware(
 # ---------------------------- Configs ---------------------------- #
 #####################################################################
 
-categories = ['TOP', 'BTM', 'RIN', 'DR','HAT']
+categories = ['TOP', 'BTM', 'RIN', 'DR','HEA']
 #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
-samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'sphere', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
+samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'hat_sphere_2', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
 args_per_categories = {
     'TOP': {
         'azi_scope' : 360,
@@ -75,7 +75,7 @@ args_per_categories = {
         'scale' : 2.0,
         'image_size' : 128
     },
-    'HAT': {
+    'HEA': {
         'azi_scope': 360,
         'elev_range': '-10~70',
         'dist_range': '3~6',
