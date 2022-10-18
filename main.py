@@ -86,7 +86,6 @@ categories_config = {
     }
 }
 
-
 categories = list(categories_config.keys()) #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 predictor_models = {}
 diffRenderers = {}
