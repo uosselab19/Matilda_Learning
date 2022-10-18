@@ -38,17 +38,15 @@ app.add_middleware(
 # ---------------------------- Configs ---------------------------- #
 #####################################################################
 
-categories = ['TOP', 'BTM', 'RIN', 'DR','HEA']
-#categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
-samples_per_categories = {'DR': 'sphere','TOP': 'sphere', 'BTM': 'sphere', 'HEA': 'hat_sphere_2', 'NEC': 'torus', 'BAG': 'torus', 'MAS':'sphere', 'RIN':'torus_sub'}
-args_per_categories = {
+categories_config = {
     'TOP': {
         'azi_scope' : 360,
         'elev_range' : '0~30',
         'dist_range' : '5~7',
         'flip_dim' : 2,
         'scale' : 2.0,
-        'image_size' : 256
+        'image_size' : 256,
+        'template' : 'sphere'
     },
     'BTM': {
         'azi_scope': 360,
@@ -56,7 +54,8 @@ args_per_categories = {
         'dist_range': '5~7',
         'flip_dim' : 2,
         'scale' : 2.0,
-        'image_size' : 256
+        'image_size' : 256,
+        'template' : 'sphere'
     },
     'RIN': {
         'azi_scope': 360,
@@ -64,15 +63,17 @@ args_per_categories = {
         'dist_range': '5~7',
         'flip_dim' : 2,
         'scale' : 2.0,
-        'image_size' : 256
+        'image_size' : 256,
+        'template' : 'torus_sub'
     },
-    'DR': {
+    'DRE': {
         'azi_scope': 360,
         'elev_range': '0~30',
         'dist_range': '4~7',
         'flip_dim' : 2,
         'scale' : 2.0,
-        'image_size' : 128
+        'image_size' : 128,
+        'template' : 'sphere'
     },
     'HEA': {
         'azi_scope': 360,
@@ -80,9 +81,12 @@ args_per_categories = {
         'dist_range': '3~6',
         'flip_dim': 3,
         'scale': 2.0,
-        'image_size': 128
+        'image_size': 128,
+        'template' : 'hat_sphere_2'
     }
 }
+
+categories = list(categories_config.keys()) #categories = ['DR', 'TOP', 'BTM', 'HEA', 'BRA', 'NEC', 'BAG', 'MAS', 'RIN']
 predictor_models = {}
 diffRenderers = {}
 
@@ -90,13 +94,15 @@ origin = "/home/ec2-user/Matilda_Learning"
 
 # 카테고리별 예측 모델 불러오기
 for category in categories:
+    config = categories_config[category]
+    template = config['template']
     # predictor
     predictor_model_path = f'{origin}/predictor/network/models/{category}.pth'
-    init_mesh_path = f"{origin}/predictor/samples/{samples_per_categories[category]}.obj"
-    predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,args_per_categories[category])
+    init_mesh_path = f"{origin}/predictor/samples/{template}.obj"
+    predictor_model, diffRenderer = predictor.get_predictor_model(init_mesh_path,predictor_model_path,config)
     predictor_models[category] = predictor_model
-    if samples_per_categories[category] not in diffRenderers:
-        diffRenderers[samples_per_categories[category]] = diffRenderer
+    if template not in diffRenderers:
+        diffRenderers[template] = diffRenderer
 
 # mask 모델 불러오기
 model_path = f"{origin}/mask/DIS/saved_models/isnet.pth"  ## load trained weights from this path
@@ -183,12 +189,15 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     if len(title) > 45:
         title = title[0:45]
 
-    image = load_into_tensor_and_resize(await file.read(),args_per_categories[category]['image_size'], mask_model) # image 사이즈 조절 및 tensor로 변환
+    config = categories_config[category]
+    template = config['template']
+
+    image = load_into_tensor_and_resize(await file.read(),config['image_size'], mask_model) # image 사이즈 조절 및 tensor로 변환
 
     predictor = predictor_models[category] # category에 해당하는 3D 속성 예측 모델 불러오기
-    dib_r = diffRenderers[samples_per_categories[category]] # category에 해당하는 3D Renderer 불러오기
+    dib_r = diffRenderers[template] # category에 해당하는 3D Renderer 불러오기
 
-    attributes = predictor(image.unsqueeze(0), args_per_categories[category]['flip_dim'])
+    attributes = predictor(image.unsqueeze(0), config['flip_dim'])
 
     # vutils.save_image(image.detach(), f'{origin}/test_img.png', normalize=True)
     # vutils.save_image(attributes['textures'].detach(),f'{origin}/test_texture.png', normalize=True)
@@ -234,14 +243,18 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
     if len(title) > 45:
         title = title[0:45]
 
+    config = categories_config[category]
+    template = config['template']
+    image_size = config['image_size']
+
     image1 = load_into_tensor_and_resize(await file1.read(), image_size, mask_model)  # image 사이즈 조절 및 tensor로 변환
     image2 = load_into_tensor_and_resize(await file2.read(), image_size, mask_model)  # image 사이즈 조절 및 tensor로 변환
     images = torch.cat([image1.unsqueeze(0),image2.unsqueeze(0)], dim=0)
 
     predictor = predictor_models[category]  # category에 해당하는 3D 속성 예측 모델 불러오기
-    dib_r = diffRenderers[samples_per_categories[category]]  # category에 해당하는 3D Renderer 불러오기
+    dib_r = diffRenderers[template]  # category에 해당하는 3D Renderer 불러오기
 
-    attributes = predictor(images, args_per_categories[category]['flip_dim'])
+    attributes = predictor(images, config['flip_dim'])
 
     attributes['vertices'] = attributes['vertices'][0].unsqueeze(0)
     attributes['lights'] =  attributes['lights'][0].unsqueeze(0)
@@ -255,6 +268,7 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
         idx = image_size+i
         alpha = i/smmoth_len
         textures[:,idx] = tex_front[:,idx]*(1-alpha) + tex_back[:,idx] * alpha
+
     attributes['textures'] = textures.unsqueeze(0)
     attributes['distances'] = attributes['distances'][0].unsqueeze(0)
     attributes['elevations'] = attributes['elevations'][0].unsqueeze(0)
