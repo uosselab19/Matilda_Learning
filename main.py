@@ -173,6 +173,7 @@ def load_into_tensor_and_resize(data, resolution, mask_model):
 
 @app.get("/")
 async def root():
+    print(f'request root')
     return {"Welcome"}
 
 @app.post("/convert")
@@ -188,6 +189,8 @@ async def convert(file: UploadFile = File(...), category: str = Form(...), X_AUT
     title = '.'.join(file.filename.split('.')[:-1])
     if len(title) > 45:
         title = title[0:45]
+
+    print(f'request convert : file = {title} , cat_code = {category}')
 
     config = categories_config[category]
     template = config['template']
@@ -304,6 +307,7 @@ async def convert_by_two_imgs(file1: UploadFile = File(...), file2: UploadFile =
 async def getCID(num: int = Form(...), X_AUTH_TOKEN: str = Header()):
     # 유효 확인
 
+    print(f'request getCID')
     # WAS를 통해 파일 정보 호출
     filePath = get_fileinfo_from_repository(num, X_AUTH_TOKEN)
 
